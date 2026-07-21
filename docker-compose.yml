@@ -54,7 +54,7 @@ services:
     build:
       context: ./frontend
     environment:
-      VITE_API_URL: http://localhost:8001
+      VITE_API_URL: http://backend:8000
     ports:
       - "5174:5173"
     volumes:
