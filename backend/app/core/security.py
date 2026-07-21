@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -17,7 +18,14 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
-def _create_token(subject: str, token_type: str, expires_delta: timedelta) -> tuple[str, str]:
+def generate_secure_token() -> str:
+    """Opaque random token for invites/password resets — looked up in storage, not decoded."""
+    return secrets.token_urlsafe(32)
+
+
+def _create_token(
+    subject: str, token_type: str, expires_delta: timedelta, extra_claims: dict | None = None
+) -> tuple[str, str]:
     jti = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     payload = {
@@ -26,6 +34,7 @@ def _create_token(subject: str, token_type: str, expires_delta: timedelta) -> tu
         "jti": jti,
         "iat": now,
         "exp": now + expires_delta,
+        **(extra_claims or {}),
     }
     token = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     return token, jti
@@ -36,8 +45,13 @@ def create_access_token(user_id: str) -> str:
     return token
 
 
-def create_refresh_token(user_id: str) -> tuple[str, str]:
-    return _create_token(user_id, "refresh", timedelta(days=settings.refresh_token_expire_days))
+def create_refresh_token(user_id: str, remember_me: bool = False) -> tuple[str, str]:
+    return _create_token(
+        user_id,
+        "refresh",
+        timedelta(days=settings.refresh_token_expire_days),
+        extra_claims={"remember_me": remember_me},
+    )
 
 
 def decode_token(token: str) -> dict:
