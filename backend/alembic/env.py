@@ -7,9 +7,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.core.database import Base
-
-# Import model modules here so Alembic's autogenerate can see them, e.g.:
-# from app.models import user  # noqa: F401
+import app.models  # noqa: F401
 
 config = context.config
 settings = get_settings()
