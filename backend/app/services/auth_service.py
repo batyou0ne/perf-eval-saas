@@ -7,13 +7,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.redis import redis_client
-from app.core.security import create_access_token, create_refresh_token, decode_token, verify_password
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    generate_secure_token,
+    hash_password,
+    verify_password,
+)
 from app.crud.user import get_user_by_email, get_user_by_id
 from app.models.user import User
 
 settings = get_settings()
 
 REFRESH_KEY_PREFIX = "refresh_token:"
+PASSWORD_RESET_KEY_PREFIX = "password_reset:"
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> User:
@@ -30,14 +38,14 @@ async def _store_refresh_token(jti: str, user_id: uuid.UUID) -> None:
     await redis_client.setex(f"{REFRESH_KEY_PREFIX}{jti}", ttl, str(user_id))
 
 
-async def issue_tokens(user: User) -> tuple[str, str]:
+async def issue_tokens(user: User, remember_me: bool = False) -> tuple[str, str]:
     access_token = create_access_token(str(user.id))
-    refresh_token, jti = create_refresh_token(str(user.id))
+    refresh_token, jti = create_refresh_token(str(user.id), remember_me=remember_me)
     await _store_refresh_token(jti, user.id)
     return access_token, refresh_token
 
 
-async def rotate_refresh_token(db: AsyncSession, refresh_token: str) -> tuple[str, str]:
+async def rotate_refresh_token(db: AsyncSession, refresh_token: str) -> tuple[str, str, bool]:
     unauthorized = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     try:
@@ -58,7 +66,9 @@ async def rotate_refresh_token(db: AsyncSession, refresh_token: str) -> tuple[st
         raise unauthorized
 
     await redis_client.delete(redis_key)
-    return await issue_tokens(user)
+    remember_me = payload.get("remember_me", False)
+    access_token, new_refresh_token = await issue_tokens(user, remember_me=remember_me)
+    return access_token, new_refresh_token, remember_me
 
 
 async def revoke_refresh_token(refresh_token: str) -> None:
@@ -70,3 +80,34 @@ async def revoke_refresh_token(refresh_token: str) -> None:
     jti = payload.get("jti")
     if jti:
         await redis_client.delete(f"{REFRESH_KEY_PREFIX}{jti}")
+
+
+async def request_password_reset(db: AsyncSession, email: str) -> None:
+    user = await get_user_by_email(db, email)
+    if user is None:
+        return  # don't reveal whether this email is registered
+
+    token = generate_secure_token()
+    ttl = timedelta(minutes=settings.password_reset_expire_minutes)
+    await redis_client.setex(f"{PASSWORD_RESET_KEY_PREFIX}{token}", ttl, str(user.id))
+
+    reset_link = f"{settings.frontend_url}/reset-password/{token}"
+    print(f"[dev-stub email] Password reset for {email}: {reset_link}")
+
+
+async def confirm_password_reset(db: AsyncSession, token: str, new_password: str) -> User:
+    invalid = HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+
+    redis_key = f"{PASSWORD_RESET_KEY_PREFIX}{token}"
+    user_id = await redis_client.get(redis_key)
+    if user_id is None:
+        raise invalid
+
+    user = await get_user_by_id(db, uuid.UUID(user_id))
+    if user is None:
+        raise invalid
+
+    user.hashed_password = hash_password(new_password)
+    await db.commit()
+    await redis_client.delete(redis_key)
+    return user
