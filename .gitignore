@@ -26,3 +26,6 @@ dist-ssr/
 .vscode/
 .idea/
 .DS_Store
+
+# Personal Claude Code tool config (matches convention in other repos)
+.claude/
