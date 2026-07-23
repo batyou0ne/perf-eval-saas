@@ -22,6 +22,7 @@ class UserRead(BaseModel):
     full_name: str
     role: UserRole
     company_id: uuid.UUID | None
+    manager_id: uuid.UUID | None
 
     model_config = {"from_attributes": True}
 

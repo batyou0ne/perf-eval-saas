@@ -1,0 +1,38 @@
+import uuid
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user
+from app.core.database import get_db
+from app.models.user import User
+from app.schemas.evaluation import EvaluationDetail, EvaluationSubmit, EvaluationSummary
+from app.services import evaluation_service
+
+router = APIRouter()
+
+
+@router.get("/evaluations/me", response_model=list[EvaluationSummary])
+async def list_my_evaluations(
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> list[EvaluationSummary]:
+    return await evaluation_service.list_my_evaluations(db, current_user)
+
+
+@router.get("/evaluations/{evaluation_id}", response_model=EvaluationDetail)
+async def get_evaluation(
+    evaluation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvaluationDetail:
+    return await evaluation_service.get_evaluation_detail(db, evaluation_id, current_user)
+
+
+@router.post("/evaluations/{evaluation_id}/submit", response_model=EvaluationDetail)
+async def submit_evaluation(
+    evaluation_id: uuid.UUID,
+    body: EvaluationSubmit,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvaluationDetail:
+    return await evaluation_service.submit_responses(db, evaluation_id, current_user, body)

@@ -12,7 +12,7 @@ interface Company {
 }
 
 export function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin';
   const [companies, setCompanies] = useState<Company[]>([]);
 
@@ -28,15 +28,10 @@ export function DashboardPage() {
   }, [refetchCompanies]);
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Welcome, {user?.full_name}</h1>
-          <p className="text-sm text-muted-foreground">{user?.role.replace('_', ' ')}</p>
-        </div>
-        <Button variant="outline" onClick={() => logout()}>
-          Log out
-        </Button>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-xl font-semibold text-foreground">Welcome, {user?.full_name}</h1>
+        <p className="text-sm text-muted-foreground">{user?.role.replace('_', ' ')}</p>
       </div>
 
       {isSuperAdmin && <CreateCompanyForm onCreated={refetchCompanies} />}
