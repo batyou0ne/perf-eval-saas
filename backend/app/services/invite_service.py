@@ -13,7 +13,10 @@ from app.schemas.invite import InviteAccept, InviteCreate
 
 settings = get_settings()
 
-INVITABLE_BY_SUPER_ADMIN = {UserRole.SUPER_ADMIN, UserRole.COMPANY_ADMIN}
+# Invite.company_id is required (not nullable) — there's no such thing as a "companyless"
+# invite. A new super_admin isn't scoped to any company, so provisioning one isn't a fit for
+# this flow; only company_admin (into a specific company) can be invited by a super_admin.
+INVITABLE_BY_SUPER_ADMIN = {UserRole.COMPANY_ADMIN}
 INVITABLE_BY_COMPANY_ADMIN = {UserRole.COMPANY_ADMIN, UserRole.MANAGER, UserRole.HR, UserRole.EMPLOYEE}
 
 
@@ -22,7 +25,7 @@ async def create_invite(db: AsyncSession, inviter: User, data: InviteCreate) -> 
         if data.company_id is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "company_id is required")
         if data.role not in INVITABLE_BY_SUPER_ADMIN:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Super admins can only invite company admins or other super admins")
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Super admins can only invite company admins")
         company_id = data.company_id
     elif inviter.role == UserRole.COMPANY_ADMIN:
         if data.role not in INVITABLE_BY_COMPANY_ADMIN:
