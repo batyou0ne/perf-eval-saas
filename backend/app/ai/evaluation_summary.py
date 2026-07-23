@@ -1,6 +1,7 @@
+from google.genai import types
 from pydantic import BaseModel
 
-from app.ai.client import openai_client
+from app.ai.client import gemini_client
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -51,12 +52,13 @@ Self-evaluation responses:
 Manager's evaluation responses:
 {_format_qa(manager_qa)}"""
 
-    completion = await openai_client.chat.completions.parse(
-        model=settings.openai_model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        response_format=EvaluationSummaryContent,
+    response = await gemini_client.aio.models.generate_content(
+        model=settings.gemini_model,
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=_SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            response_schema=EvaluationSummaryContent,
+        ),
     )
-    return completion.choices[0].message.parsed
+    return response.parsed

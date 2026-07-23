@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     invite_expire_days: int = 7
     password_reset_expire_minutes: int = 60
 
-    openai_api_key: str = ""
-    openai_model: str = "gpt-4o"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-flash-latest"
 
     cors_origins: str = "http://localhost:5173"
     frontend_url: str = "http://localhost:5174"
