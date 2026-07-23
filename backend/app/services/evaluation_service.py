@@ -8,9 +8,23 @@ from app.crud.evaluation import get_evaluation_by_id, list_evaluations_for_user
 from app.models.evaluation import Evaluation, EvaluationStatus
 from app.models.question import QuestionType
 from app.models.response import Response
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.evaluation import EvaluationDetail, EvaluationSubmit, EvaluationSummary, ResponseRead
 from app.schemas.evaluation_cycle import QuestionRead
+
+
+def can_view_evaluation(current_user: User, evaluation: Evaluation) -> bool:
+    """Shared visibility rule, also used by the AI summary service."""
+    if current_user.id == evaluation.evaluator_id:
+        return True
+    if current_user.id == evaluation.subject_id:
+        return evaluation.status == EvaluationStatus.SUBMITTED
+    is_company_oversight = current_user.role in (UserRole.COMPANY_ADMIN, UserRole.HR) and (
+        current_user.company_id == evaluation.cycle.company_id
+    )
+    if is_company_oversight:
+        return evaluation.status == EvaluationStatus.SUBMITTED
+    return False
 
 
 def _to_detail(evaluation: Evaluation) -> EvaluationDetail:
@@ -61,15 +75,13 @@ async def get_evaluation_detail(db: AsyncSession, evaluation_id: uuid.UUID, curr
     if evaluation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation not found")
 
-    is_evaluator = current_user.id == evaluation.evaluator_id
-    is_subject = current_user.id == evaluation.subject_id
-    if not is_evaluator and not is_subject:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized to view this evaluation")
-
-    # A subject viewing someone else's evaluation of them (e.g. their manager's) can only
-    # see it once it's submitted - not while their manager is still filling it out.
-    if is_subject and not is_evaluator and evaluation.status != EvaluationStatus.SUBMITTED:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This evaluation hasn't been submitted yet")
+    if not can_view_evaluation(current_user, evaluation):
+        detail = (
+            "This evaluation hasn't been submitted yet"
+            if current_user.id == evaluation.subject_id
+            else "Not authorized to view this evaluation"
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
 
     return _to_detail(evaluation)
 

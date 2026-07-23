@@ -19,6 +19,14 @@ async def list_evaluations_for_user(db: AsyncSession, user_id: uuid.UUID) -> lis
     return list(result.scalars().all())
 
 
+_DETAIL_OPTIONS = (
+    selectinload(Evaluation.cycle).selectinload(EvaluationCycle.questions),
+    selectinload(Evaluation.subject),
+    selectinload(Evaluation.evaluator),
+    selectinload(Evaluation.responses).selectinload(Response.question),
+)
+
+
 async def get_evaluation_by_id(db: AsyncSession, evaluation_id: uuid.UUID) -> Evaluation | None:
     # populate_existing: without it, a second call within the same session (e.g. re-fetching
     # after submit_responses adds new Response rows) returns the same identity-mapped object
@@ -27,12 +35,19 @@ async def get_evaluation_by_id(db: AsyncSession, evaluation_id: uuid.UUID) -> Ev
     result = await db.execute(
         select(Evaluation)
         .where(Evaluation.id == evaluation_id)
-        .options(
-            selectinload(Evaluation.cycle).selectinload(EvaluationCycle.questions),
-            selectinload(Evaluation.subject),
-            selectinload(Evaluation.evaluator),
-            selectinload(Evaluation.responses).selectinload(Response.question),
-        )
+        .options(*_DETAIL_OPTIONS)
         .execution_options(populate_existing=True)
     )
     return result.scalar_one_or_none()
+
+
+async def get_evaluations_for_subject_in_cycle(
+    db: AsyncSession, cycle_id: uuid.UUID, subject_id: uuid.UUID
+) -> list[Evaluation]:
+    result = await db.execute(
+        select(Evaluation)
+        .where(Evaluation.cycle_id == cycle_id, Evaluation.subject_id == subject_id)
+        .options(*_DETAIL_OPTIONS)
+        .execution_options(populate_existing=True)
+    )
+    return list(result.scalars().all())
