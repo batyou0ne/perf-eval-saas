@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context';
 import { apiFetchJson, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface Question {
   id: string;
@@ -23,7 +23,9 @@ interface ResponseRead {
 
 interface EvaluationDetail {
   id: string;
+  cycle_id: string;
   cycle_name: string;
+  subject_id: string;
   subject_name: string;
   evaluator_id: string;
   evaluator_name: string;
@@ -150,6 +152,97 @@ export function EvaluationDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {evaluation.status === 'submitted' && (
+        <AISummarySection cycleId={evaluation.cycle_id} subjectId={evaluation.subject_id} />
+      )}
     </div>
+  );
+}
+
+interface SummaryContent {
+  synthesis: string;
+  strengths: string[];
+  growth_areas: string[];
+  alignment_notes: string;
+}
+
+function AISummarySection({ cycleId, subjectId }: { cycleId: string; subjectId: string }) {
+  const [summary, setSummary] = useState<SummaryContent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetchJson<SummaryContent>(`/api/v1/cycles/${cycleId}/subjects/${subjectId}/summary`)
+      .then(setSummary)
+      .catch((err) => {
+        if (!(err instanceof ApiError && err.status === 404)) {
+          setError(err instanceof ApiError ? err.message : 'Could not load summary');
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [cycleId, subjectId]);
+
+  async function handleGenerate() {
+    setError(null);
+    setGenerating(true);
+    try {
+      const result = await apiFetchJson<SummaryContent>(`/api/v1/cycles/${cycleId}/subjects/${subjectId}/summary`, {
+        method: 'POST',
+      });
+      setSummary(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not generate summary');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>AI Summary</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {summary ? (
+          <>
+            <p className="text-sm text-foreground">{summary.synthesis}</p>
+            <div>
+              <p className="text-sm font-medium text-foreground">Strengths</p>
+              <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                {summary.strengths.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Growth areas</p>
+              <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                {summary.growth_areas.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Self vs. manager alignment</p>
+              <p className="text-sm text-muted-foreground">{summary.alignment_notes}</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Generate an AI synthesis of the self-evaluation and manager evaluation once both are submitted.
+            </p>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button variant="outline" onClick={handleGenerate} disabled={generating} className="self-start">
+              {generating ? 'Generating…' : 'Generate AI Summary'}
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

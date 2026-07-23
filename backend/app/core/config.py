@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     password_reset_expire_minutes: int = 60
 
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
 
     cors_origins: str = "http://localhost:5173"
     frontend_url: str = "http://localhost:5174"
