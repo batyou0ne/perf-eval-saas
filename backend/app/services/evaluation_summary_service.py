@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import HTTPException, status
-from openai import AuthenticationError, OpenAIError, RateLimitError
+from google.genai.errors import APIError, ClientError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.evaluation_summary import generate_evaluation_summary
@@ -83,16 +83,15 @@ async def get_or_generate_summary(
             manager_name=manager_eval.evaluator.full_name,
             manager_qa=_qa_pairs(manager_eval),
         )
-    except RateLimitError as exc:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            "The OpenAI account has no available quota. Check billing at platform.openai.com and try again.",
-        ) from exc
-    except AuthenticationError as exc:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY, "OpenAI rejected the API key - check OPENAI_API_KEY in .env."
-        ) from exc
-    except OpenAIError as exc:
+    except ClientError as exc:
+        if exc.code == 429:
+            detail = "The Gemini API free-tier quota was exceeded. Wait a bit and try again."
+        elif exc.code in (401, 403):
+            detail = "Gemini rejected the API key - check GEMINI_API_KEY in .env."
+        else:
+            detail = f"AI summary generation failed ({exc.code}). Please try again."
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail) from exc
+    except APIError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "AI summary generation failed. Please try again.") from exc
 
     summary = EvaluationSummary(cycle_id=cycle_id, subject_id=subject_id, content=content.model_dump())
