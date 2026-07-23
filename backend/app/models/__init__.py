@@ -1,6 +1,7 @@
 from app.models.company import Company
 from app.models.evaluation import Evaluation, EvaluationStatus, EvaluationType
 from app.models.evaluation_cycle import CycleStatus, EvaluationCycle
+from app.models.evaluation_summary import EvaluationSummary
 from app.models.invite import Invite
 from app.models.question import Question, QuestionType
 from app.models.response import Response
@@ -12,6 +13,7 @@ __all__ = [
     "Evaluation",
     "EvaluationCycle",
     "EvaluationStatus",
+    "EvaluationSummary",
     "EvaluationType",
     "Invite",
     "Question",
