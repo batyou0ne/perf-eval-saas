@@ -35,7 +35,7 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
 
 async def _store_refresh_token(jti: str, user_id: uuid.UUID) -> None:
     ttl = timedelta(days=settings.refresh_token_expire_days)
-    await redis_client.setex(f"{REFRESH_KEY_PREFIX}{jti}", ttl, str(user_id))
+    await redis_client.set(f"{REFRESH_KEY_PREFIX}{jti}", str(user_id), ex=ttl)
 
 
 async def issue_tokens(user: User, remember_me: bool = False) -> tuple[str, str]:
@@ -89,7 +89,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
 
     token = generate_secure_token()
     ttl = timedelta(minutes=settings.password_reset_expire_minutes)
-    await redis_client.setex(f"{PASSWORD_RESET_KEY_PREFIX}{token}", ttl, str(user.id))
+    await redis_client.set(f"{PASSWORD_RESET_KEY_PREFIX}{token}", str(user.id), ex=ttl)
 
     reset_link = f"{settings.frontend_url}/reset-password/{token}"
     print(f"[dev-stub email] Password reset for {email}: {reset_link}")
