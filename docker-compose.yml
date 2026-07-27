@@ -36,8 +36,10 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - ./backend/app:/app/app
-      - ./backend/alembic:/app/alembic
+      # Whole directory, not individual paths: single-file bind mounts (e.g.
+      # pytest.ini) go stale when an editor replaces the file instead of writing
+      # in place, silently serving old content inside the container.
+      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
