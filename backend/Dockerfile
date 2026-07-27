@@ -6,8 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# This image is dev-only — the CMD below runs uvicorn with --reload — so it also
+# installs the test dependencies, which lets `docker compose exec backend pytest`
+# work. A production image would install requirements.txt alone.
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements-dev.txt
 
 COPY . .
 

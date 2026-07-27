@@ -1,7 +1,7 @@
 from google.genai import types
 from pydantic import BaseModel
 
-from app.ai.client import gemini_client
+from app.ai.client import get_gemini_client
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -52,7 +52,7 @@ Self-evaluation responses:
 Manager's evaluation responses:
 {_format_qa(manager_qa)}"""
 
-    response = await gemini_client.aio.models.generate_content(
+    response = await get_gemini_client().aio.models.generate_content(
         model=settings.gemini_model,
         contents=user_prompt,
         config=types.GenerateContentConfig(
