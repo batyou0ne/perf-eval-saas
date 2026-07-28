@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
+import { apiUrl } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +21,7 @@ export function ResetPasswordPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch('/api/v1/auth/password-reset/confirm', {
+      const res = await fetch(apiUrl('/api/v1/auth/password-reset/confirm'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
+import { apiUrl } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,7 +29,7 @@ export function AcceptInvitePage() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`/api/v1/invites/${token}`)
+    fetch(apiUrl(`/api/v1/invites/${token}`))
       .then((res) => {
         if (!res.ok) throw new Error('This invite link is invalid.');
         return res.json();
@@ -43,7 +44,7 @@ export function AcceptInvitePage() {
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/v1/invites/${token}/accept`, {
+      const res = await fetch(apiUrl(`/api/v1/invites/${token}/accept`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
