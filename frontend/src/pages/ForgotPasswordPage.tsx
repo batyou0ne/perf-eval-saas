@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
+import { apiUrl } from '@/lib/api';
+
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -14,7 +16,7 @@ export function ForgotPasswordPage() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      await fetch('/api/v1/auth/password-reset/request', {
+      await fetch(apiUrl('/api/v1/auth/password-reset/request'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),

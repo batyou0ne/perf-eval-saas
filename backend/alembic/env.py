@@ -13,6 +13,9 @@ config = context.config
 settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
+# Same asyncpg/Neon SSL note as app/core/database.py.
+connect_args = {"ssl": "require"} if settings.environment != "development" else {}
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
@@ -44,6 +47,7 @@ async def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

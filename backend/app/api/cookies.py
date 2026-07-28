@@ -9,12 +9,16 @@ REFRESH_COOKIE_PATH = "/api/v1/auth"
 
 
 def set_refresh_cookie(response: Response, refresh_token: str, remember_me: bool = False) -> None:
+    is_production = settings.environment != "development"
     cookie_kwargs = {
         "key": REFRESH_COOKIE_NAME,
         "value": refresh_token,
         "httponly": True,
-        "secure": settings.environment != "development",
-        "samesite": "lax",
+        "secure": is_production,
+        # Frontend and backend are deployed on different origins, so the browser
+        # treats them as cross-site — SameSite=Lax would drop the cookie on fetch()
+        # calls. Lax is kept for local dev where both run on http://localhost.
+        "samesite": "none" if is_production else "lax",
         "path": REFRESH_COOKIE_PATH,
     }
     if remember_me:

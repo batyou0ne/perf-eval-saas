@@ -1,3 +1,15 @@
+// Distinct from VITE_API_URL (which docker-compose.yml sets for vite.config.ts's
+// dev-server proxy target only) — Vite exposes VITE_-prefixed process env vars
+// to the client bundle too, and that one holds a Docker-internal hostname
+// ("backend") that the browser can't resolve. In dev this is left unset, so
+// relative paths keep going through the proxy; in production it's set to the
+// deployed backend's public URL.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 let accessToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
 
@@ -10,7 +22,7 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 }
 
 async function refreshAccessToken(): Promise<string | null> {
-  const res = await fetch('/api/v1/auth/refresh', { method: 'POST', credentials: 'include' });
+  const res = await fetch(apiUrl('/api/v1/auth/refresh'), { method: 'POST', credentials: 'include' });
   if (!res.ok) return null;
   const data = await res.json();
   accessToken = data.access_token as string;
@@ -20,7 +32,7 @@ async function refreshAccessToken(): Promise<string | null> {
 /** Fetch wrapper that attaches the access token and retries once after a silent refresh on 401. */
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const doFetch = () =>
-    fetch(path, {
+    fetch(apiUrl(path), {
       ...options,
       credentials: 'include',
       headers: {
