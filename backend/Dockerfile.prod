@@ -1,0 +1,21 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+# Render's free tier has no pre-deploy/release-phase step, so migrations run
+# here on every container start instead — alembic upgrade head is a no-op if
+# already current. Render injects PORT (default 10000) and expects the app to
+# bind to it; shell form so the env var actually expands, with a fallback for
+# running this image outside of Render.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

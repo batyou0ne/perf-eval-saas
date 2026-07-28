@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { apiFetch, apiFetchJson, setAccessToken, setUnauthorizedHandler } from '@/lib/api';
+import { apiFetch, apiFetchJson, apiUrl, setAccessToken, setUnauthorizedHandler } from '@/lib/api';
 
 export type UserRole = 'super_admin' | 'company_admin' | 'manager' | 'hr' | 'employee';
 
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // try to restore a session from the httpOnly refresh cookie on first mount.
   useEffect(() => {
     (async () => {
-      const res = await fetch('/api/v1/auth/refresh', { method: 'POST', credentials: 'include' });
+      const res = await fetch(apiUrl('/api/v1/auth/refresh'), { method: 'POST', credentials: 'include' });
       if (!res.ok) {
         setStatus('unauthenticated');
         return;
@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string, rememberMe: boolean) => {
-      const res = await fetch('/api/v1/auth/login', {
+      const res = await fetch(apiUrl('/api/v1/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
