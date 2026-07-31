@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.evaluation import Evaluation
 from app.models.evaluation_cycle import EvaluationCycle
 from app.models.response import Response
+from app.models.user import User
 
 
 async def list_evaluations_for_user(db: AsyncSession, user_id: uuid.UUID) -> list[Evaluation]:
@@ -49,5 +50,17 @@ async def get_evaluations_for_subject_in_cycle(
         .where(Evaluation.cycle_id == cycle_id, Evaluation.subject_id == subject_id)
         .options(*_DETAIL_OPTIONS)
         .execution_options(populate_existing=True)
+    )
+    return list(result.scalars().all())
+
+
+async def get_evaluations_for_cycle(db: AsyncSession, cycle_id: uuid.UUID) -> list[Evaluation]:
+    """All self and manager evaluations for a cycle, ordered by subject name for stable grouping."""
+    result = await db.execute(
+        select(Evaluation)
+        .where(Evaluation.cycle_id == cycle_id)
+        .join(User, Evaluation.subject_id == User.id)
+        .options(selectinload(Evaluation.subject))
+        .order_by(User.full_name)
     )
     return list(result.scalars().all())

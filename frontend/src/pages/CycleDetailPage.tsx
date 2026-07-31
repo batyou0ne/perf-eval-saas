@@ -20,9 +20,31 @@ interface CycleDetail {
   questions: Question[];
 }
 
+type EvaluationStatus = 'not_started' | 'in_progress' | 'submitted';
+
+interface SubjectProgress {
+  subject_id: string;
+  subject_name: string;
+  self_status: EvaluationStatus;
+  manager_status: EvaluationStatus | null;
+}
+
+interface CycleProgress {
+  self_submitted: number;
+  self_total: number;
+  manager_submitted: number;
+  manager_total: number;
+  subjects: SubjectProgress[];
+}
+
+function formatStatus(status: EvaluationStatus): string {
+  return status.replace('_', ' ');
+}
+
 export function CycleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [cycle, setCycle] = useState<CycleDetail | null>(null);
+  const [progress, setProgress] = useState<CycleProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
 
@@ -30,6 +52,11 @@ export function CycleDetailPage() {
     if (!id) return;
     apiFetchJson<CycleDetail>(`/api/v1/cycles/${id}`).then(setCycle);
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !cycle || cycle.status === 'draft') return;
+    apiFetchJson<CycleProgress>(`/api/v1/cycles/${id}/progress`).then(setProgress);
+  }, [id, cycle?.status]);
 
   async function handleActivate() {
     if (!id) return;
@@ -85,6 +112,57 @@ export function CycleDetailPage() {
         <p className="text-sm text-muted-foreground">
           This cycle is active — self and manager evaluations have been generated for everyone in the company.
         </p>
+      )}
+
+      {cycle.status !== 'draft' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Progress</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {!progress ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-x-6 gap-y-1">
+                  <p className="text-sm text-foreground">
+                    Self-evaluations:{' '}
+                    <span className="font-medium">
+                      {progress.self_submitted}/{progress.self_total}
+                    </span>{' '}
+                    submitted
+                  </p>
+                  <p className="text-sm text-foreground">
+                    Manager evaluations:{' '}
+                    <span className="font-medium">
+                      {progress.manager_submitted}/{progress.manager_total}
+                    </span>{' '}
+                    submitted
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-3 gap-4 text-xs font-medium text-muted-foreground">
+                    <span>Employee</span>
+                    <span>Self-eval</span>
+                    <span>Manager eval</span>
+                  </div>
+                  {progress.subjects.map((s) => (
+                    <div
+                      key={s.subject_id}
+                      className="grid grid-cols-3 items-center gap-4 border-b pb-2 text-sm last:border-b-0 last:pb-0"
+                    >
+                      <span className="text-foreground">{s.subject_name}</span>
+                      <span className="capitalize text-muted-foreground">{formatStatus(s.self_status)}</span>
+                      <span className="capitalize text-muted-foreground">
+                        {s.manager_status ? formatStatus(s.manager_status) : 'No manager'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
