@@ -14,6 +14,8 @@ class EvaluationSummary(BaseModel):
     cycle_name: str
     subject_id: uuid.UUID
     subject_name: str
+    evaluator_id: uuid.UUID
+    evaluator_name: str
     type: EvaluationType
     status: EvaluationStatus
     submitted_at: datetime | None

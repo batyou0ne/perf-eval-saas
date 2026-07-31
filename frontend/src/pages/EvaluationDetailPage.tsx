@@ -87,7 +87,11 @@ export function EvaluationDetailPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">
-          {evaluation.type === 'self' ? 'Self-evaluation' : `Evaluating ${evaluation.subject_name}`}
+          {evaluation.type === 'self'
+            ? 'Self-evaluation'
+            : user?.id === evaluation.evaluator_id
+              ? `Evaluating ${evaluation.subject_name}`
+              : 'Manager review'}
         </h1>
         <p className="text-sm text-muted-foreground">{evaluation.cycle_name}</p>
       </div>
