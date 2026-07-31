@@ -37,6 +37,20 @@ async def test_my_evaluations_lists_own_self_and_reports(client, as_user, manage
     kinds = {(e["type"], e["subject_id"]) for e in listing}
     assert ("self", str(manager.id)) in kinds
     assert ("manager", str(employee.id)) in kinds
+    assert all(e["evaluator_id"] == str(manager.id) for e in listing)
+
+
+async def test_my_evaluations_reports_evaluator_for_records_where_user_is_subject(
+    client, as_user, manager, employee, active_cycle
+):
+    """A manager-eval of the employee must carry the manager's evaluator_id, not the employee's own id."""
+    as_user(employee)
+
+    listing = (await client.get(f"{EVALUATIONS}/me")).json()
+
+    manager_eval = next(e for e in listing if e["type"] == "manager" and e["subject_id"] == str(employee.id))
+    assert manager_eval["evaluator_id"] == str(manager.id)
+    assert manager_eval["evaluator_name"] == manager.full_name
 
 
 async def test_submitting_stores_and_returns_the_responses(client, as_user, employee, employee_self_eval):

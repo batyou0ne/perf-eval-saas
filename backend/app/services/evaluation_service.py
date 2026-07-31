@@ -62,6 +62,8 @@ async def list_my_evaluations(db: AsyncSession, user: User) -> list[EvaluationSu
             cycle_name=e.cycle.name,
             subject_id=e.subject_id,
             subject_name=e.subject.full_name,
+            evaluator_id=e.evaluator_id,
+            evaluator_name=e.evaluator.full_name,
             type=e.type,
             status=e.status,
             submitted_at=e.submitted_at,
