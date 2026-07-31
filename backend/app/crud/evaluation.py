@@ -14,7 +14,11 @@ async def list_evaluations_for_user(db: AsyncSession, user_id: uuid.UUID) -> lis
     result = await db.execute(
         select(Evaluation)
         .where(or_(Evaluation.evaluator_id == user_id, Evaluation.subject_id == user_id))
-        .options(selectinload(Evaluation.cycle), selectinload(Evaluation.subject))
+        .options(
+            selectinload(Evaluation.cycle),
+            selectinload(Evaluation.subject),
+            selectinload(Evaluation.evaluator),
+        )
         .order_by(Evaluation.created_at.desc())
     )
     return list(result.scalars().all())
