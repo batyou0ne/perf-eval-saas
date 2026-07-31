@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,16 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173"
     frontend_url: str = "http://localhost:5174"
+
+    @model_validator(mode="after")
+    def check_frontend_url_set_in_production(self) -> "Settings":
+        if self.environment == "production" and self.frontend_url == "http://localhost:5174":
+            raise ValueError(
+                "FRONTEND_URL is unset (defaulting to localhost) while ENVIRONMENT=production. "
+                "Set FRONTEND_URL to the deployed frontend URL — invite and password-reset "
+                "links are built from it."
+            )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:
