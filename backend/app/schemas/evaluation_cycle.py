@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel
 
+from app.models.evaluation import EvaluationStatus
 from app.models.evaluation_cycle import CycleStatus
 from app.models.question import QuestionType
 
@@ -42,3 +43,19 @@ class CycleRead(BaseModel):
 
 class CycleDetail(CycleRead):
     questions: list[QuestionRead]
+
+
+class SubjectProgress(BaseModel):
+    subject_id: uuid.UUID
+    subject_name: str
+    self_status: EvaluationStatus
+    # None means the subject has no manager, so no manager evaluation exists for them.
+    manager_status: EvaluationStatus | None
+
+
+class CycleProgress(BaseModel):
+    self_submitted: int
+    self_total: int
+    manager_submitted: int
+    manager_total: int
+    subjects: list[SubjectProgress]

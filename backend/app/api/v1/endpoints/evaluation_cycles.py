@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.crud.evaluation_cycle import get_cycle_by_id, list_cycles_by_company
 from app.models.evaluation_cycle import EvaluationCycle
 from app.models.user import User, UserRole
-from app.schemas.evaluation_cycle import CycleCreate, CycleDetail, CycleRead
+from app.schemas.evaluation_cycle import CycleCreate, CycleDetail, CycleProgress, CycleRead
 from app.services import cycle_service
 
 router = APIRouter()
@@ -55,3 +55,13 @@ async def activate_cycle(
 ) -> CycleRead:
     cycle = await _get_owned_cycle(db, cycle_id, current_user)
     return await cycle_service.activate_cycle(db, cycle)
+
+
+@router.get("/cycles/{cycle_id}/progress", response_model=CycleProgress)
+async def get_cycle_progress(
+    cycle_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
+) -> CycleProgress:
+    cycle = await _get_owned_cycle(db, cycle_id, current_user)
+    return await cycle_service.get_cycle_progress(db, cycle)
