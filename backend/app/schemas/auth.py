@@ -23,6 +23,7 @@ class UserRead(BaseModel):
     role: UserRole
     company_id: uuid.UUID | None
     manager_id: uuid.UUID | None
+    is_active: bool
 
     model_config = {"from_attributes": True}
 
