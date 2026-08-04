@@ -30,6 +30,13 @@ class CycleCreate(BaseModel):
     questions: list[QuestionCreate]
 
 
+class CycleUpdate(BaseModel):
+    name: str
+    start_date: date
+    end_date: date
+    questions: list[QuestionCreate]
+
+
 class CycleRead(BaseModel):
     id: uuid.UUID
     name: str
