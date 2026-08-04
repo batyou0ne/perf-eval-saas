@@ -2,7 +2,7 @@
 
 from sqlalchemy import select
 
-from app.models import Evaluation, EvaluationType, UserRole
+from app.models import Evaluation, EvaluationType, Question, UserRole
 from tests.factories import make_user
 
 CYCLES = "/api/v1/cycles"
@@ -14,6 +14,15 @@ NEW_CYCLE = {
     "questions": [
         {"text": "Rate overall performance", "type": "rating", "order": 0},
         {"text": "What could improve?", "type": "text", "order": 1},
+    ],
+}
+
+UPDATED_CYCLE = {
+    "name": "Q2 2026 Review (revised)",
+    "start_date": "2026-04-15",
+    "end_date": "2026-07-15",
+    "questions": [
+        {"text": "Rate teamwork", "type": "rating", "order": 0},
     ],
 }
 
@@ -121,3 +130,60 @@ async def test_employee_cannot_activate_a_cycle(client, as_user, employee, cycle
 async def test_cannot_activate_another_companys_cycle(client, as_user, other_company_admin, cycle):
     as_user(other_company_admin)
     assert (await client.post(f"{CYCLES}/{cycle.id}/activate")).status_code == 404
+
+
+async def test_company_admin_can_edit_a_draft_cycle(client, as_user, company_admin, cycle):
+    as_user(company_admin)
+
+    response = await client.patch(f"{CYCLES}/{cycle.id}", json=UPDATED_CYCLE)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == UPDATED_CYCLE["name"]
+    assert body["start_date"] == UPDATED_CYCLE["start_date"]
+    assert body["end_date"] == UPDATED_CYCLE["end_date"]
+    assert [q["text"] for q in body["questions"]] == ["Rate teamwork"]
+
+
+async def test_hr_can_edit_a_draft_cycle(client, as_user, hr_user, cycle):
+    as_user(hr_user)
+    assert (await client.patch(f"{CYCLES}/{cycle.id}", json=UPDATED_CYCLE)).status_code == 200
+
+
+async def test_employee_cannot_edit_a_cycle(client, as_user, employee, cycle):
+    as_user(employee)
+    assert (await client.patch(f"{CYCLES}/{cycle.id}", json=UPDATED_CYCLE)).status_code == 403
+
+
+async def test_manager_cannot_edit_a_cycle(client, as_user, manager, cycle):
+    as_user(manager)
+    assert (await client.patch(f"{CYCLES}/{cycle.id}", json=UPDATED_CYCLE)).status_code == 403
+
+
+async def test_cannot_edit_another_companys_cycle(client, as_user, other_company_admin, cycle):
+    as_user(other_company_admin)
+    assert (await client.patch(f"{CYCLES}/{cycle.id}", json=UPDATED_CYCLE)).status_code == 404
+
+
+async def test_cannot_edit_an_active_cycle(client, as_user, company_admin, cycle):
+    as_user(company_admin)
+    await client.post(f"{CYCLES}/{cycle.id}/activate")
+
+    response = await client.patch(f"{CYCLES}/{cycle.id}", json=UPDATED_CYCLE)
+
+    assert response.status_code == 400
+
+
+async def test_editing_a_cycle_fully_replaces_its_questions(client, as_user, db_session, company_admin, cycle):
+    original_ids = {
+        str(q.id)
+        for q in (await db_session.execute(select(Question).where(Question.cycle_id == cycle.id))).scalars().all()
+    }
+    as_user(company_admin)
+
+    response = await client.patch(f"{CYCLES}/{cycle.id}", json=UPDATED_CYCLE)
+
+    body = response.json()
+    new_ids = {q["id"] for q in body["questions"]}
+    assert len(body["questions"]) == 1
+    assert new_ids.isdisjoint(original_ids)
