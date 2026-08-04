@@ -9,6 +9,7 @@ from app.crud.user import list_active_users_by_company
 from app.models.evaluation import Evaluation, EvaluationStatus, EvaluationType
 from app.models.evaluation_cycle import CycleStatus, EvaluationCycle
 from app.models.question import Question
+from app.models.user import UserRole
 from app.schemas.evaluation_cycle import CycleCreate, CycleProgress, SubjectProgress
 
 
@@ -39,7 +40,8 @@ async def activate_cycle(db: AsyncSession, cycle: EvaluationCycle) -> Evaluation
     users = await list_active_users_by_company(db, cycle.company_id)
     for user in users:
         db.add(Evaluation(cycle_id=cycle.id, subject_id=user.id, evaluator_id=user.id, type=EvaluationType.SELF))
-        if user.manager_id is not None:
+        # Only employees are reviewed by a manager; managers/admins/HR only self-evaluate.
+        if user.manager_id is not None and user.role == UserRole.EMPLOYEE:
             db.add(
                 Evaluation(
                     cycle_id=cycle.id,

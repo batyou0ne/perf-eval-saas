@@ -79,6 +79,23 @@ async def test_activation_generates_self_and_manager_evaluations(
     assert manager_evals == {(employee.id, manager.id)}
 
 
+async def test_activation_does_not_review_a_manager_even_if_they_have_a_manager_id(
+    client, as_user, db_session, company, company_admin, manager, cycle
+):
+    """Only employees get reviewed — a non-employee with manager_id set still shouldn't get a manager-eval."""
+    reviewed_manager = await make_user(
+        db_session, role=UserRole.MANAGER, company_id=company.id, manager_id=manager.id
+    )
+    as_user(company_admin)
+
+    await client.post(f"{CYCLES}/{cycle.id}/activate")
+
+    evaluations = (await db_session.execute(select(Evaluation).where(Evaluation.cycle_id == cycle.id))).scalars().all()
+    manager_evals = {e.subject_id for e in evaluations if e.type == EvaluationType.MANAGER}
+
+    assert reviewed_manager.id not in manager_evals
+
+
 async def test_activation_skips_inactive_users(client, as_user, db_session, company, company_admin, cycle):
     await make_user(db_session, role=UserRole.EMPLOYEE, company_id=company.id, is_active=False)
     as_user(company_admin)
