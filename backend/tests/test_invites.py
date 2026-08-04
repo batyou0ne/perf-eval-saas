@@ -14,6 +14,11 @@ def _token_from(response) -> str:
     return response.json()["invite_link"].rstrip("/").rsplit("/", 1)[-1]
 
 
+async def _invite_id_for(client, email: str) -> str:
+    invites = (await client.get(INVITES)).json()
+    return next(i["id"] for i in invites if i["email"] == email)
+
+
 async def test_company_admin_can_invite_an_employee(client, as_user, company_admin):
     as_user(company_admin)
 
@@ -176,3 +181,128 @@ async def test_hr_cannot_invite(client, as_user, db_session, company):
     response = await client.post(INVITES, json={"email": "hrinvite@example.com", "role": "employee"})
 
     assert response.status_code == 403
+
+
+async def test_company_admin_can_list_pending_invites(client, as_user, company_admin):
+    as_user(company_admin)
+    await client.post(INVITES, json={"email": "pending@example.com", "role": "employee"})
+
+    response = await client.get(INVITES)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["email"] == "pending@example.com"
+    assert body[0]["accepted_at"] is None
+
+
+async def test_invite_list_is_scoped_to_the_callers_company(client, as_user, company_admin, other_company_admin):
+    as_user(company_admin)
+    await client.post(INVITES, json={"email": "mine@example.com", "role": "employee"})
+
+    as_user(other_company_admin)
+    response = await client.get(INVITES)
+
+    assert response.json() == []
+
+
+async def test_hr_cannot_list_invites(client, as_user, db_session, company):
+    hr = await make_user(db_session, role=UserRole.HR, company_id=company.id)
+    as_user(hr)
+    assert (await client.get(INVITES)).status_code == 403
+
+
+async def test_employee_cannot_list_invites(client, as_user, employee):
+    as_user(employee)
+    assert (await client.get(INVITES)).status_code == 403
+
+
+async def test_company_admin_can_cancel_a_pending_invite(client, as_user, company_admin):
+    as_user(company_admin)
+    await client.post(INVITES, json={"email": "cancel-me@example.com", "role": "employee"})
+    invite_id = await _invite_id_for(client, "cancel-me@example.com")
+
+    response = await client.delete(f"{INVITES}/{invite_id}")
+
+    assert response.status_code == 204
+    assert (await client.get(INVITES)).json() == []
+
+
+async def test_cannot_cancel_an_already_accepted_invite(client, as_user, company_admin):
+    as_user(company_admin)
+    created = await client.post(INVITES, json={"email": "accepted-cancel@example.com", "role": "employee"})
+    token = _token_from(created)
+    invite_id = await _invite_id_for(client, "accepted-cancel@example.com")
+
+    client.headers.pop("Authorization", None)
+    await client.post(f"{INVITES}/{token}/accept", json={"full_name": "Acc Epted", "password": "acceptedpass123"})
+
+    as_user(company_admin)
+    response = await client.delete(f"{INVITES}/{invite_id}")
+
+    assert response.status_code == 400
+
+
+async def test_cannot_cancel_another_companys_invite(client, as_user, company_admin, other_company_admin):
+    as_user(company_admin)
+    await client.post(INVITES, json={"email": "notyours-cancel@example.com", "role": "employee"})
+    invite_id = await _invite_id_for(client, "notyours-cancel@example.com")
+
+    as_user(other_company_admin)
+    response = await client.delete(f"{INVITES}/{invite_id}")
+
+    assert response.status_code == 404
+
+
+async def test_hr_cannot_cancel_an_invite(client, as_user, db_session, company, company_admin):
+    as_user(company_admin)
+    await client.post(INVITES, json={"email": "hrtarget-cancel@example.com", "role": "employee"})
+    invite_id = await _invite_id_for(client, "hrtarget-cancel@example.com")
+
+    hr = await make_user(db_session, role=UserRole.HR, company_id=company.id)
+    as_user(hr)
+    response = await client.delete(f"{INVITES}/{invite_id}")
+
+    assert response.status_code == 403
+
+
+async def test_company_admin_can_resend_an_invite_with_a_new_token(client, as_user, company_admin):
+    as_user(company_admin)
+    created = await client.post(INVITES, json={"email": "resend-me@example.com", "role": "employee"})
+    old_token = _token_from(created)
+    invite_id = await _invite_id_for(client, "resend-me@example.com")
+
+    response = await client.post(f"{INVITES}/{invite_id}/resend")
+    assert response.status_code == 200
+    new_token = _token_from(response)
+    assert new_token != old_token
+
+    client.headers.pop("Authorization", None)
+    assert (await client.get(f"{INVITES}/{old_token}")).status_code == 404
+    assert (await client.get(f"{INVITES}/{new_token}")).status_code == 200
+
+
+async def test_cannot_resend_an_already_accepted_invite(client, as_user, company_admin):
+    as_user(company_admin)
+    created = await client.post(INVITES, json={"email": "accepted-resend@example.com", "role": "employee"})
+    token = _token_from(created)
+    invite_id = await _invite_id_for(client, "accepted-resend@example.com")
+
+    client.headers.pop("Authorization", None)
+    await client.post(f"{INVITES}/{token}/accept", json={"full_name": "Acc Epted", "password": "acceptedpass123"})
+
+    as_user(company_admin)
+    response = await client.post(f"{INVITES}/{invite_id}/resend")
+
+    assert response.status_code == 400
+
+
+async def test_cannot_resend_another_companys_invite(client, as_user, company_admin, other_company_admin):
+    as_user(company_admin)
+    await client.post(INVITES, json={"email": "notyours-resend@example.com", "role": "employee"})
+    invite_id = await _invite_id_for(client, "notyours-resend@example.com")
+
+    as_user(other_company_admin)
+    response = await client.post(f"{INVITES}/{invite_id}/resend")
+
+    assert response.status_code == 404

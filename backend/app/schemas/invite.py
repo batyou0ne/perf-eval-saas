@@ -27,6 +27,17 @@ class InvitePreview(BaseModel):
     accepted_at: datetime | None
 
 
+class InviteRead(BaseModel):
+    id: uuid.UUID
+    email: str
+    role: UserRole
+    created_at: datetime
+    expires_at: datetime
+    accepted_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
 class InviteAccept(BaseModel):
     full_name: str
     password: str

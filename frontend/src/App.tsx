@@ -11,6 +11,7 @@ import { CyclesPage } from '@/pages/CyclesPage'
 import { NewCyclePage } from '@/pages/NewCyclePage'
 import { CycleDetailPage } from '@/pages/CycleDetailPage'
 import { TeamPage } from '@/pages/TeamPage'
+import { InvitesPage } from '@/pages/InvitesPage'
 import { MyEvaluationsPage } from '@/pages/MyEvaluationsPage'
 import { EvaluationDetailPage } from '@/pages/EvaluationDetailPage'
 
@@ -32,6 +33,7 @@ function App() {
               <Route path="/cycles/new" element={<NewCyclePage />} />
               <Route path="/cycles/:id" element={<CycleDetailPage />} />
               <Route path="/team" element={<TeamPage />} />
+              <Route path="/invites" element={<InvitesPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
