@@ -30,3 +30,21 @@ async def assign_manager(
     current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
 ) -> UserRead:
     return await user_service.assign_manager(db, current_user, user_id, body.manager_id)
+
+
+@router.post("/users/{user_id}/deactivate", response_model=UserRead)
+async def deactivate_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
+) -> UserRead:
+    return await user_service.deactivate_user(db, current_user, user_id)
+
+
+@router.post("/users/{user_id}/reactivate", response_model=UserRead)
+async def reactivate_user(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
+) -> UserRead:
+    return await user_service.reactivate_user(db, current_user, user_id)
