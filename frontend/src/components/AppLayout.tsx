@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 export function AppLayout() {
   const { user, logout } = useAuth();
   const canManage = user?.role === 'company_admin' || user?.role === 'hr';
+  const isCompanyAdmin = user?.role === 'company_admin';
 
   return (
     <div className="min-h-svh">
@@ -25,6 +26,11 @@ export function AppLayout() {
                 Team
               </Link>
             </>
+          )}
+          {isCompanyAdmin && (
+            <Link to="/invites" className="text-sm text-muted-foreground hover:text-foreground">
+              Invites
+            </Link>
           )}
         </nav>
         <div className="flex items-center gap-3">
