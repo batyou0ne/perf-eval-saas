@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.crud.evaluation_cycle import get_cycle_by_id, list_cycles_by_company
 from app.models.evaluation_cycle import EvaluationCycle
 from app.models.user import User, UserRole
-from app.schemas.evaluation_cycle import CycleCreate, CycleDetail, CycleProgress, CycleRead
+from app.schemas.evaluation_cycle import CycleCreate, CycleDetail, CycleProgress, CycleRead, CycleUpdate
 from app.services import cycle_service
 
 router = APIRouter()
@@ -45,6 +45,17 @@ async def get_cycle(
     current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
 ) -> CycleDetail:
     return await _get_owned_cycle(db, cycle_id, current_user)
+
+
+@router.patch("/cycles/{cycle_id}", response_model=CycleDetail)
+async def update_cycle(
+    cycle_id: uuid.UUID,
+    body: CycleUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
+) -> CycleDetail:
+    cycle = await _get_owned_cycle(db, cycle_id, current_user)
+    return await cycle_service.update_cycle(db, cycle, body)
 
 
 @router.post("/cycles/{cycle_id}/activate", response_model=CycleRead)
