@@ -10,7 +10,7 @@ from app.models.evaluation import Evaluation, EvaluationStatus, EvaluationType
 from app.models.evaluation_cycle import CycleStatus, EvaluationCycle
 from app.models.question import Question
 from app.models.user import UserRole
-from app.schemas.evaluation_cycle import CycleCreate, CycleProgress, SubjectProgress
+from app.schemas.evaluation_cycle import CycleCreate, CycleProgress, CycleUpdate, SubjectProgress
 
 
 async def create_cycle(db: AsyncSession, company_id: uuid.UUID, data: CycleCreate) -> EvaluationCycle:
@@ -30,6 +30,29 @@ async def create_cycle(db: AsyncSession, company_id: uuid.UUID, data: CycleCreat
 
     # Re-fetch with questions eager-loaded rather than relying on lazy-loading the
     # relationship afterward, which doesn't work outside an explicit eager-load in async SQLAlchemy.
+    return await get_cycle_by_id(db, cycle.id)
+
+
+async def update_cycle(db: AsyncSession, cycle: EvaluationCycle, data: CycleUpdate) -> EvaluationCycle:
+    if cycle.status != CycleStatus.DRAFT:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only draft cycles can be edited")
+
+    cycle.name = data.name
+    cycle.start_date = data.start_date
+    cycle.end_date = data.end_date
+
+    # Full replace rather than diffing: nothing references question ids yet in a
+    # draft cycle (evaluations/responses only exist once it's activated), so there's
+    # no stability to preserve and diffing would just be complexity for no benefit.
+    # Appending through the relationship (not db.add with a bare cycle_id) matters
+    # here specifically: cycle.questions was already loaded by the caller, and
+    # cascade="all, delete-orphan" treats a same-flush child that was never
+    # associated via the relationship as parentless, deleting it right back out.
+    cycle.questions.clear()
+    for q in data.questions:
+        cycle.questions.append(Question(text=q.text, type=q.type, order=q.order))
+
+    await db.commit()
     return await get_cycle_by_id(db, cycle.id)
 
 

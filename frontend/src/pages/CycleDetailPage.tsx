@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { apiFetchJson, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CycleForm, type CycleFormValues } from '@/components/CycleForm';
 
 interface Question {
   id: string;
@@ -47,6 +48,9 @@ export function CycleDetailPage() {
   const [progress, setProgress] = useState<CycleProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -74,6 +78,28 @@ export function CycleDetailPage() {
     }
   }
 
+  async function handleSave(values: CycleFormValues) {
+    if (!id) return;
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const updated = await apiFetchJson<CycleDetail>(`/api/v1/cycles/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...values,
+          questions: values.questions.map((q, i) => ({ ...q, order: i })),
+        }),
+      });
+      setCycle(updated);
+      setIsEditing(false);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : 'Could not update cycle');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!cycle) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   return (
@@ -86,27 +112,55 @@ export function CycleDetailPage() {
           </p>
         </div>
         {cycle.status === 'draft' && (
-          <Button onClick={handleActivate} disabled={activating}>
-            {activating ? 'Activating…' : 'Activate cycle'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setIsEditing((current) => !current)}>
+              {isEditing ? 'Cancel edit' : 'Edit'}
+            </Button>
+            <Button onClick={handleActivate} disabled={activating}>
+              {activating ? 'Activating…' : 'Activate cycle'}
+            </Button>
+          </div>
         )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Questions</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {cycle.questions.map((q) => (
-            <div key={q.id} className="flex items-center justify-between border-b pb-2 last:border-b-0 last:pb-0">
-              <span className="text-sm text-foreground">{q.text}</span>
-              <span className="text-xs capitalize text-muted-foreground">{q.type}</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      {isEditing ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Edit cycle</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CycleForm
+              initialValues={{
+                name: cycle.name,
+                start_date: cycle.start_date,
+                end_date: cycle.end_date,
+                questions: cycle.questions.map((q) => ({ text: q.text, type: q.type })),
+              }}
+              onSubmit={handleSave}
+              submitLabel="Save changes"
+              submittingLabel="Saving…"
+              submitting={saving}
+              error={saveError}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Questions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {cycle.questions.map((q) => (
+              <div key={q.id} className="flex items-center justify-between border-b pb-2 last:border-b-0 last:pb-0">
+                <span className="text-sm text-foreground">{q.text}</span>
+                <span className="text-xs capitalize text-muted-foreground">{q.type}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {cycle.status === 'active' && (
         <p className="text-sm text-muted-foreground">
