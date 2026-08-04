@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
@@ -5,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import generate_secure_token, hash_password
+from app.crud.invite import get_invite_by_id
 from app.crud.user import get_user_by_email
 from app.models.company import Company
 from app.models.invite import Invite
@@ -51,6 +53,32 @@ async def create_invite(db: AsyncSession, inviter: User, data: InviteCreate) -> 
         expires_at=datetime.now(timezone.utc) + timedelta(days=settings.invite_expire_days),
     )
     db.add(invite)
+    await db.commit()
+    await db.refresh(invite)
+    return invite
+
+
+async def _get_pending_invite(db: AsyncSession, actor: User, invite_id: uuid.UUID) -> Invite:
+    invite = await get_invite_by_id(db, invite_id)
+    if invite is None or invite.company_id != actor.company_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invite not found")
+    if invite.accepted_at is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invite has already been accepted")
+    return invite
+
+
+async def cancel_invite(db: AsyncSession, actor: User, invite_id: uuid.UUID) -> None:
+    invite = await _get_pending_invite(db, actor, invite_id)
+    await db.delete(invite)
+    await db.commit()
+
+
+async def resend_invite(db: AsyncSession, actor: User, invite_id: uuid.UUID) -> Invite:
+    invite = await _get_pending_invite(db, actor, invite_id)
+    # Rotate the token rather than reusing it — the old link may already have been
+    # shared somewhere, so resending should invalidate it rather than repeat it.
+    invite.token = generate_secure_token()
+    invite.expires_at = datetime.now(timezone.utc) + timedelta(days=settings.invite_expire_days)
     await db.commit()
     await db.refresh(invite)
     return invite
