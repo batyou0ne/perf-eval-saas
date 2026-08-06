@@ -5,7 +5,7 @@ AI-powered employee performance evaluation platform.
 ## Stack
 
 - **Backend:** FastAPI, SQLAlchemy 2.0 (async), PostgreSQL, Alembic
-- **AI:** OpenAI API (GPT-4o)
+- **AI:** Google Gemini API (google-genai)
 - **Auth:** JWT (access + refresh token)
 - **Cache:** Redis
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn/ui

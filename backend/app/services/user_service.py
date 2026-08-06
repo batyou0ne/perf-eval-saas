@@ -14,8 +14,16 @@ async def _get_target_in_company(db: AsyncSession, actor: User, target_user_id: 
     return target
 
 
-async def assign_manager(db: AsyncSession, actor: User, target_user_id: uuid.UUID, manager_id: uuid.UUID) -> User:
+async def assign_manager(
+    db: AsyncSession, actor: User, target_user_id: uuid.UUID, manager_id: uuid.UUID | None
+) -> User:
     target = await _get_target_in_company(db, actor, target_user_id)
+
+    if manager_id is None:
+        target.manager_id = None
+        await db.commit()
+        await db.refresh(target)
+        return target
 
     if manager_id == target_user_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A user cannot be their own manager")
