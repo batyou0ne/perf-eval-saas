@@ -4,12 +4,18 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.evaluation import get_evaluation_by_id, list_evaluations_for_user
+from app.crud.evaluation import get_evaluation_by_id, list_evaluations_for_user, upsert_responses
 from app.models.evaluation import Evaluation, EvaluationStatus
 from app.models.question import QuestionType
-from app.models.response import Response
 from app.models.user import User, UserRole
-from app.schemas.evaluation import EvaluationDetail, EvaluationSubmit, EvaluationSummary, ResponseRead
+from app.schemas.evaluation import (
+    EvaluationDetail,
+    EvaluationDraftSave,
+    EvaluationSubmit,
+    EvaluationSummary,
+    ResponseInput,
+    ResponseRead,
+)
 from app.schemas.evaluation_cycle import QuestionRead
 
 
@@ -88,6 +94,22 @@ async def get_evaluation_detail(db: AsyncSession, evaluation_id: uuid.UUID, curr
     return _to_detail(evaluation)
 
 
+def _validate_answer(question, response_input: ResponseInput) -> None:
+    if question.type == QuestionType.RATING:
+        if response_input.rating_value is None or not (1 <= response_input.rating_value <= 5):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{question.text}' requires a rating from 1 to 5")
+    else:
+        if not response_input.text_value:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{question.text}' requires a text answer")
+
+
+def _authorize_evaluator_write(evaluation: Evaluation, current_user: User) -> None:
+    if evaluation.evaluator_id != current_user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the assigned evaluator can update this evaluation")
+    if evaluation.status == EvaluationStatus.SUBMITTED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This evaluation has already been submitted")
+
+
 async def submit_responses(
     db: AsyncSession, evaluation_id: uuid.UUID, current_user: User, data: EvaluationSubmit
 ) -> EvaluationDetail:
@@ -95,11 +117,7 @@ async def submit_responses(
     if evaluation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation not found")
 
-    if evaluation.evaluator_id != current_user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the assigned evaluator can submit this evaluation")
-
-    if evaluation.status == EvaluationStatus.SUBMITTED:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This evaluation has already been submitted")
+    _authorize_evaluator_write(evaluation, current_user)
 
     questions_by_id = {q.id: q for q in evaluation.cycle.questions}
     submitted_question_ids = {r.question_id for r in data.responses}
@@ -107,26 +125,38 @@ async def submit_responses(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "All questions must be answered")
 
     for response_input in data.responses:
-        question = questions_by_id[response_input.question_id]
+        _validate_answer(questions_by_id[response_input.question_id], response_input)
 
-        if question.type == QuestionType.RATING:
-            if response_input.rating_value is None or not (1 <= response_input.rating_value <= 5):
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{question.text}' requires a rating from 1 to 5")
-        else:
-            if not response_input.text_value:
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"'{question.text}' requires a text answer")
-
-        db.add(
-            Response(
-                evaluation_id=evaluation.id,
-                question_id=response_input.question_id,
-                rating_value=response_input.rating_value,
-                text_value=response_input.text_value,
-            )
-        )
+    await upsert_responses(db, evaluation.id, data.responses)
 
     evaluation.status = EvaluationStatus.SUBMITTED
     evaluation.submitted_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return _to_detail(await get_evaluation_by_id(db, evaluation.id))
+
+
+async def save_draft(
+    db: AsyncSession, evaluation_id: uuid.UUID, current_user: User, data: EvaluationDraftSave
+) -> EvaluationDetail:
+    evaluation = await get_evaluation_by_id(db, evaluation_id)
+    if evaluation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evaluation not found")
+
+    _authorize_evaluator_write(evaluation, current_user)
+
+    questions_by_id = {q.id: q for q in evaluation.cycle.questions}
+    unknown_question_ids = {r.question_id for r in data.responses} - set(questions_by_id.keys())
+    if unknown_question_ids:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown question in draft")
+
+    for response_input in data.responses:
+        _validate_answer(questions_by_id[response_input.question_id], response_input)
+
+    await upsert_responses(db, evaluation.id, data.responses)
+
+    if evaluation.status == EvaluationStatus.NOT_STARTED:
+        evaluation.status = EvaluationStatus.IN_PROGRESS
     await db.commit()
 
     return _to_detail(await get_evaluation_by_id(db, evaluation.id))
