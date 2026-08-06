@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-flash-latest"
 
+    resend_api_key: str = ""
+    email_from: str = "onboarding@resend.dev"
+
     cors_origins: str = "http://localhost:5173"
     frontend_url: str = "http://localhost:5174"
 
