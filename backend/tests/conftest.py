@@ -25,6 +25,8 @@ os.environ["REDIS_URL"] = f"{_DEV_REDIS_URL.rsplit('/', 1)[0]}/15"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-that-is-long-enough-for-hs256"
 # Blank on purpose: nothing in the suite may make a real Gemini call.
 os.environ["GEMINI_API_KEY"] = ""
+# Blank on purpose: nothing in the suite may make a real Resend call.
+os.environ["RESEND_API_KEY"] = ""
 
 # --- app imports -------------------------------------------------------------
 
