@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import timedelta
 
@@ -20,6 +21,7 @@ from app.models.user import User
 from app.services import email_service
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 REFRESH_KEY_PREFIX = "refresh_token:"
 PASSWORD_RESET_KEY_PREFIX = "password_reset:"
@@ -28,8 +30,10 @@ PASSWORD_RESET_KEY_PREFIX = "password_reset:"
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> User:
     user = await get_user_by_email(db, email)
     if user is None or not verify_password(password, user.hashed_password):
+        logger.warning("Login attempt failed", extra={"email": email, "reason": "invalid_credentials"})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
     if not user.is_active:
+        logger.warning("Login attempt failed", extra={"email": email, "reason": "inactive_account"})
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive")
     return user
 
