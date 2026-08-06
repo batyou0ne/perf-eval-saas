@@ -52,3 +52,9 @@ class EvaluationDetail(BaseModel):
 
 class EvaluationSubmit(BaseModel):
     responses: list[ResponseInput]
+
+
+class EvaluationDraftSave(BaseModel):
+    """Partial response list — unlike EvaluationSubmit, not every question needs to be present."""
+
+    responses: list[ResponseInput]
