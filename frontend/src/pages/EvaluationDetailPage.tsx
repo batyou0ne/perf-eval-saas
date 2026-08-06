@@ -46,11 +46,24 @@ export function EvaluationDetailPage() {
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     apiFetchJson<EvaluationDetail>(`/api/v1/evaluations/${id}`)
-      .then(setEvaluation)
+      .then((data) => {
+        setEvaluation(data);
+        setAnswers(
+          Object.fromEntries(
+            data.responses.map((r) => [
+              r.question_id,
+              { rating_value: r.rating_value ?? undefined, text_value: r.text_value ?? undefined },
+            ]),
+          ),
+        );
+      })
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Could not load evaluation'));
   }, [id]);
 
@@ -58,6 +71,33 @@ export function EvaluationDetailPage() {
   if (!evaluation) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   const canFillOut = user?.id === evaluation.evaluator_id && evaluation.status !== 'submitted';
+
+  async function handleSaveDraft() {
+    if (!id) return;
+    setDraftError(null);
+    setDraftSaved(false);
+    setSavingDraft(true);
+    try {
+      const responses = Object.entries(answers)
+        .filter(([, a]) => a.rating_value !== undefined || a.text_value)
+        .map(([question_id, a]) => ({
+          question_id,
+          rating_value: a.rating_value ?? null,
+          text_value: a.text_value ?? null,
+        }));
+      const updated = await apiFetchJson<EvaluationDetail>(`/api/v1/evaluations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responses }),
+      });
+      setEvaluation(updated);
+      setDraftSaved(true);
+    } catch (err) {
+      setDraftError(err instanceof ApiError ? err.message : 'Could not save draft');
+    } finally {
+      setSavingDraft(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -133,10 +173,24 @@ export function EvaluationDetailPage() {
                   )}
                 </div>
               ))}
+              {draftError && <p className="text-sm text-destructive">{draftError}</p>}
               {submitError && <p className="text-sm text-destructive">{submitError}</p>}
-              <Button type="submit" disabled={submitting}>
-                {submitting ? 'Submitting…' : 'Submit evaluation'}
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? 'Submitting…' : 'Submit evaluation'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={savingDraft}
+                  onClick={() => {
+                    void handleSaveDraft();
+                  }}
+                >
+                  {savingDraft ? 'Saving…' : 'Save Draft'}
+                </Button>
+                {draftSaved && !savingDraft && <span className="text-sm text-muted-foreground">Draft saved</span>}
+              </div>
             </form>
           ) : evaluation.status === 'submitted' ? (
             <div className="flex flex-col gap-5">
