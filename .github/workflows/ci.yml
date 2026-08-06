@@ -131,6 +131,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Run tests
+        run: npm run test
+
       - name: Typecheck and build
         # `npm run build` is `tsc -b && vite build`, so this covers typechecking too.
         run: npm run build
