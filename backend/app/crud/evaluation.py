@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from app.models.evaluation import Evaluation
 from app.models.evaluation_cycle import EvaluationCycle
 from app.models.response import Response
 from app.models.user import User
+from app.schemas.evaluation import ResponseInput
 
 
 async def list_evaluations_for_user(db: AsyncSession, user_id: uuid.UUID) -> list[Evaluation]:
@@ -56,6 +58,34 @@ async def get_evaluations_for_subject_in_cycle(
         .execution_options(populate_existing=True)
     )
     return list(result.scalars().all())
+
+
+async def upsert_responses(db: AsyncSession, evaluation_id: uuid.UUID, responses: Sequence[ResponseInput]) -> None:
+    """Update existing (evaluation_id, question_id) rows in place, insert the rest.
+
+    Keeps the unique constraint intact across repeated draft-saves and a later submit.
+    Does not commit — the caller controls the transaction.
+    """
+    question_ids = [r.question_id for r in responses]
+    result = await db.execute(
+        select(Response).where(Response.evaluation_id == evaluation_id, Response.question_id.in_(question_ids))
+    )
+    existing_by_question_id = {r.question_id: r for r in result.scalars().all()}
+
+    for response_input in responses:
+        existing = existing_by_question_id.get(response_input.question_id)
+        if existing is not None:
+            existing.rating_value = response_input.rating_value
+            existing.text_value = response_input.text_value
+        else:
+            db.add(
+                Response(
+                    evaluation_id=evaluation_id,
+                    question_id=response_input.question_id,
+                    rating_value=response_input.rating_value,
+                    text_value=response_input.text_value,
+                )
+            )
 
 
 async def get_evaluations_for_cycle(db: AsyncSession, cycle_id: uuid.UUID) -> list[Evaluation]:
