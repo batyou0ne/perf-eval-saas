@@ -22,19 +22,25 @@ function renderPage() {
   );
 }
 
+function page(items: unknown[]) {
+  return { items, total: items.length, page: 1, page_size: 20 };
+}
+
 describe('MyEvaluationsPage', () => {
   it('labels a self-evaluation as "Self-evaluation"', async () => {
     mockUseAuth.mockReturnValue({ user: { id: EMPLOYEE_ID } } as ReturnType<typeof useAuth>);
-    mockApiFetchJson.mockResolvedValue([
-      {
-        id: 'eval-1',
-        cycle_name: 'H1 2026',
-        subject_name: 'Employee One',
-        evaluator_id: EMPLOYEE_ID,
-        type: 'self',
-        status: 'in_progress',
-      },
-    ]);
+    mockApiFetchJson.mockResolvedValue(
+      page([
+        {
+          id: 'eval-1',
+          cycle_name: 'H1 2026',
+          subject_name: 'Employee One',
+          evaluator_id: EMPLOYEE_ID,
+          type: 'self',
+          status: 'in_progress',
+        },
+      ]),
+    );
 
     renderPage();
 
@@ -43,16 +49,18 @@ describe('MyEvaluationsPage', () => {
 
   it('labels a manager-eval as "Evaluate {subject}" and links to it when the user is the evaluator', async () => {
     mockUseAuth.mockReturnValue({ user: { id: MANAGER_ID } } as ReturnType<typeof useAuth>);
-    mockApiFetchJson.mockResolvedValue([
-      {
-        id: 'eval-2',
-        cycle_name: 'H1 2026',
-        subject_name: 'Employee One',
-        evaluator_id: MANAGER_ID,
-        type: 'manager',
-        status: 'not_started',
-      },
-    ]);
+    mockApiFetchJson.mockResolvedValue(
+      page([
+        {
+          id: 'eval-2',
+          cycle_name: 'H1 2026',
+          subject_name: 'Employee One',
+          evaluator_id: MANAGER_ID,
+          type: 'manager',
+          status: 'not_started',
+        },
+      ]),
+    );
 
     renderPage();
 
@@ -65,16 +73,18 @@ describe('MyEvaluationsPage', () => {
   // with the card locked until the manager submits.
   it('labels a manager-eval as "Manager review" and locks the card when the user is the subject and it is not yet submitted', async () => {
     mockUseAuth.mockReturnValue({ user: { id: EMPLOYEE_ID } } as ReturnType<typeof useAuth>);
-    mockApiFetchJson.mockResolvedValue([
-      {
-        id: 'eval-3',
-        cycle_name: 'H1 2026',
-        subject_name: 'Employee One',
-        evaluator_id: MANAGER_ID,
-        type: 'manager',
-        status: 'in_progress',
-      },
-    ]);
+    mockApiFetchJson.mockResolvedValue(
+      page([
+        {
+          id: 'eval-3',
+          cycle_name: 'H1 2026',
+          subject_name: 'Employee One',
+          evaluator_id: MANAGER_ID,
+          type: 'manager',
+          status: 'in_progress',
+        },
+      ]),
+    );
 
     renderPage();
 
@@ -85,16 +95,18 @@ describe('MyEvaluationsPage', () => {
 
   it('unlocks the card for the subject once the manager-eval is submitted', async () => {
     mockUseAuth.mockReturnValue({ user: { id: EMPLOYEE_ID } } as ReturnType<typeof useAuth>);
-    mockApiFetchJson.mockResolvedValue([
-      {
-        id: 'eval-4',
-        cycle_name: 'H1 2026',
-        subject_name: 'Employee One',
-        evaluator_id: MANAGER_ID,
-        type: 'manager',
-        status: 'submitted',
-      },
-    ]);
+    mockApiFetchJson.mockResolvedValue(
+      page([
+        {
+          id: 'eval-4',
+          cycle_name: 'H1 2026',
+          subject_name: 'Employee One',
+          evaluator_id: MANAGER_ID,
+          type: 'manager',
+          status: 'submitted',
+        },
+      ]),
+    );
 
     renderPage();
 
