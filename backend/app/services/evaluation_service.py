@@ -17,6 +17,7 @@ from app.schemas.evaluation import (
     ResponseRead,
 )
 from app.schemas.evaluation_cycle import QuestionRead
+from app.schemas.pagination import Page
 
 
 def can_view_evaluation(current_user: User, evaluation: Evaluation) -> bool:
@@ -59,9 +60,9 @@ def _to_detail(evaluation: Evaluation) -> EvaluationDetail:
     )
 
 
-async def list_my_evaluations(db: AsyncSession, user: User) -> list[EvaluationSummary]:
-    evaluations = await list_evaluations_for_user(db, user.id)
-    return [
+async def list_my_evaluations(db: AsyncSession, user: User, page: int, page_size: int) -> Page[EvaluationSummary]:
+    evaluations, total = await list_evaluations_for_user(db, user.id, offset=(page - 1) * page_size, limit=page_size)
+    items = [
         EvaluationSummary(
             id=e.id,
             cycle_id=e.cycle_id,
@@ -76,6 +77,7 @@ async def list_my_evaluations(db: AsyncSession, user: User) -> list[EvaluationSu
         )
         for e in evaluations
     ]
+    return Page(items=items, total=total, page=page, page_size=page_size)
 
 
 async def get_evaluation_detail(db: AsyncSession, evaluation_id: uuid.UUID, current_user: User) -> EvaluationDetail:

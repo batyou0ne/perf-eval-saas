@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,18 +12,26 @@ from app.models.user import User
 from app.schemas.evaluation import ResponseInput
 
 
-async def list_evaluations_for_user(db: AsyncSession, user_id: uuid.UUID) -> list[Evaluation]:
+async def list_evaluations_for_user(
+    db: AsyncSession, user_id: uuid.UUID, offset: int, limit: int
+) -> tuple[list[Evaluation], int]:
+    scope = or_(Evaluation.evaluator_id == user_id, Evaluation.subject_id == user_id)
+
+    total = await db.scalar(select(func.count()).select_from(Evaluation).where(scope))
+
     result = await db.execute(
         select(Evaluation)
-        .where(or_(Evaluation.evaluator_id == user_id, Evaluation.subject_id == user_id))
+        .where(scope)
         .options(
             selectinload(Evaluation.cycle),
             selectinload(Evaluation.subject),
             selectinload(Evaluation.evaluator),
         )
         .order_by(Evaluation.created_at.desc())
+        .offset(offset)
+        .limit(limit)
     )
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total or 0
 
 
 _DETAIL_OPTIONS = (
