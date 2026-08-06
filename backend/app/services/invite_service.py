@@ -54,7 +54,7 @@ async def create_invite(db: AsyncSession, inviter: User, data: InviteCreate) -> 
     )
     db.add(invite)
     await db.commit()
-    await db.refresh(invite)
+    await db.refresh(invite, attribute_names=["company"])
     return invite
 
 
