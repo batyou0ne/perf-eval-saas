@@ -195,3 +195,74 @@ async def test_an_unrelated_colleague_cannot_view_an_evaluation(
     response = await client.get(f"{EVALUATIONS}/{manager_eval_of_employee['id']}")
 
     assert response.status_code == 403
+
+
+# --- draft save ---------------------------------------------------------------
+
+
+async def test_draft_save_accepts_a_partial_answer_and_moves_to_in_progress(
+    client, as_user, employee, employee_self_eval
+):
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    only_one = detail["questions"][:1]
+
+    response = await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": only_one[0]["id"], "rating_value": 3}]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "in_progress"
+    assert len(body["responses"]) == 1
+
+
+async def test_draft_saving_the_same_question_twice_does_not_duplicate_the_row(
+    client, as_user, employee, employee_self_eval
+):
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    question_id = detail["questions"][0]["id"]
+
+    await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": question_id, "rating_value": 2}]},
+    )
+    response = await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": question_id, "rating_value": 5}]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    matching = [r for r in body["responses"] if r["question_id"] == question_id]
+    assert len(matching) == 1
+    assert matching[0]["rating_value"] == 5
+
+
+async def test_cannot_draft_save_a_submitted_evaluation(client, as_user, employee, employee_self_eval):
+    as_user(employee)
+    assert (await submit_evaluation(client, employee_self_eval["id"])).status_code == 200
+
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    response = await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": detail["questions"][0]["id"], "rating_value": 4}]},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_only_the_assigned_evaluator_can_draft_save(client, as_user, employee, manager, employee_self_eval):
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    question_id = detail["questions"][0]["id"]
+
+    as_user(manager)
+    response = await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": question_id, "rating_value": 4}]},
+    )
+
+    assert response.status_code == 403
