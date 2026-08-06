@@ -11,7 +11,7 @@ from app.crud.invite import get_invite_by_token, list_invites_by_company
 from app.models.user import User, UserRole
 from app.schemas.auth import TokenResponse
 from app.schemas.invite import InviteAccept, InviteCreate, InviteCreateResponse, InvitePreview, InviteRead
-from app.services import auth_service, invite_service
+from app.services import auth_service, email_service, invite_service
 
 router = APIRouter()
 settings = get_settings()
@@ -29,7 +29,7 @@ async def create_invite(
 ) -> InviteCreateResponse:
     invite = await invite_service.create_invite(db, inviter, body)
     invite_link = _build_invite_link(invite.token)
-    print(f"[dev-stub email] Invite for {invite.email}: {invite_link}")
+    email_service.send_invite_email(invite.email, invite_link, invite.company.name)
     return InviteCreateResponse(
         email=invite.email, role=invite.role, invite_link=invite_link, expires_at=invite.expires_at
     )
@@ -88,7 +88,7 @@ async def resend_invite(
 ) -> InviteCreateResponse:
     invite = await invite_service.resend_invite(db, current_user, invite_id)
     invite_link = _build_invite_link(invite.token)
-    print(f"[dev-stub email] Invite for {invite.email}: {invite_link}")
+    email_service.send_invite_email(invite.email, invite_link, invite.company.name)
     return InviteCreateResponse(
         email=invite.email, role=invite.role, invite_link=invite_link, expires_at=invite.expires_at
     )

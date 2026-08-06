@@ -15,7 +15,9 @@ async def get_invite_by_token(db: AsyncSession, token: str) -> Invite | None:
 
 
 async def get_invite_by_id(db: AsyncSession, invite_id: uuid.UUID) -> Invite | None:
-    result = await db.execute(select(Invite).where(Invite.id == invite_id))
+    result = await db.execute(
+        select(Invite).where(Invite.id == invite_id).options(selectinload(Invite.company))
+    )
     return result.scalar_one_or_none()
 
 
