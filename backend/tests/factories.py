@@ -39,7 +39,7 @@ async def make_user(
 
 async def find_evaluation(client, *, cycle_id, subject_id, eval_type: str) -> dict | None:
     """Locate one of the current user's evaluations from /evaluations/me."""
-    listing = (await client.get("/api/v1/evaluations/me")).json()
+    listing = (await client.get("/api/v1/evaluations/me", params={"page_size": 100})).json()["items"]
     return next(
         (
             e
