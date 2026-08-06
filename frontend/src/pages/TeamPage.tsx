@@ -24,14 +24,13 @@ export function TeamPage() {
   }, []);
 
   async function handleManagerChange(userId: string, managerId: string) {
-    if (!managerId) return;
     setError(null);
     setSavingId(userId);
     try {
       const updated = await apiFetchJson<TeamUser>(`/api/v1/users/${userId}/manager`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_id: managerId }),
+        body: JSON.stringify({ manager_id: managerId || null }),
       });
       setUsers((current) => current?.map((u) => (u.id === userId ? updated : u)) ?? null);
     } catch (err) {
