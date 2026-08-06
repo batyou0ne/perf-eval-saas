@@ -4,4 +4,4 @@ from pydantic import BaseModel
 
 
 class AssignManagerRequest(BaseModel):
-    manager_id: uuid.UUID
+    manager_id: uuid.UUID | None
