@@ -17,6 +17,7 @@ from app.core.security import (
 )
 from app.crud.user import get_user_by_email, get_user_by_id
 from app.models.user import User
+from app.services import email_service
 
 settings = get_settings()
 
@@ -92,7 +93,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
     await redis_client.set(f"{PASSWORD_RESET_KEY_PREFIX}{token}", str(user.id), ex=ttl)
 
     reset_link = f"{settings.frontend_url}/reset-password/{token}"
-    print(f"[dev-stub email] Password reset for {email}: {reset_link}")
+    email_service.send_password_reset_email(email, reset_link)
 
 
 async def confirm_password_reset(db: AsyncSession, token: str, new_password: str) -> User:
