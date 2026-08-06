@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.cookies import REFRESH_COOKIE_NAME, clear_refresh_cookie, set_refresh_cookie
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
@@ -18,7 +19,10 @@ router = APIRouter()
 
 
 @router.post("/auth/login", response_model=TokenResponse)
-async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("5/minute")
+async def login(
+    request: Request, body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
     user = await auth_service.authenticate_user(db, body.email, body.password)
     access_token, refresh_token = await auth_service.issue_tokens(user, remember_me=body.remember_me)
     set_refresh_cookie(response, refresh_token, remember_me=body.remember_me)
@@ -50,7 +54,10 @@ async def me(current_user: User = Depends(get_current_user)) -> User:
 
 
 @router.post("/auth/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
-async def request_password_reset(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)) -> None:
+@limiter.limit("3/minute")
+async def request_password_reset(
+    request: Request, body: PasswordResetRequest, db: AsyncSession = Depends(get_db)
+) -> None:
     await auth_service.request_password_reset(db, body.email)
 
 

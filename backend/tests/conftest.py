@@ -103,7 +103,11 @@ async def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
+    # raise_app_exceptions=False: an unhandled exception is caught by the app's own
+    # ServerErrorMiddleware handler and turned into a real 500 response — httpx's default
+    # of re-raising it would hide that and make the client behave unlike a real browser.
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as test_client:
         yield test_client
     app.dependency_overrides.clear()
 

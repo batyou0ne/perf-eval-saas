@@ -32,7 +32,7 @@ async def manager_eval_of_employee(client, as_user, manager, employee, active_cy
 async def test_my_evaluations_lists_own_self_and_reports(client, as_user, manager, employee, active_cycle):
     as_user(manager)
 
-    listing = (await client.get(f"{EVALUATIONS}/me")).json()
+    listing = (await client.get(f"{EVALUATIONS}/me")).json()["items"]
 
     kinds = {(e["type"], e["subject_id"]) for e in listing}
     assert ("self", str(manager.id)) in kinds
@@ -46,11 +46,50 @@ async def test_my_evaluations_reports_evaluator_for_records_where_user_is_subjec
     """A manager-eval of the employee must carry the manager's evaluator_id, not the employee's own id."""
     as_user(employee)
 
-    listing = (await client.get(f"{EVALUATIONS}/me")).json()
+    listing = (await client.get(f"{EVALUATIONS}/me")).json()["items"]
 
     manager_eval = next(e for e in listing if e["type"] == "manager" and e["subject_id"] == str(employee.id))
     assert manager_eval["evaluator_id"] == str(manager.id)
     assert manager_eval["evaluator_name"] == manager.full_name
+
+
+# --- pagination ----------------------------------------------------------------
+
+
+async def test_my_evaluations_is_paginated(client, as_user, manager, employee, active_cycle):
+    """The manager has two evaluations (self + report on employee); page_size=1 should split them across pages."""
+    as_user(manager)
+
+    page_one = (await client.get(f"{EVALUATIONS}/me", params={"page": 1, "page_size": 1})).json()
+    page_two = (await client.get(f"{EVALUATIONS}/me", params={"page": 2, "page_size": 1})).json()
+
+    assert page_one["total"] == 2
+    assert page_one["page"] == 1
+    assert page_one["page_size"] == 1
+    assert len(page_one["items"]) == 1
+
+    assert page_two["page"] == 2
+    assert len(page_two["items"]) == 1
+    assert page_one["items"][0]["id"] != page_two["items"][0]["id"]
+
+
+async def test_my_evaluations_page_past_the_end_is_empty(client, as_user, manager, active_cycle):
+    as_user(manager)
+
+    response = await client.get(f"{EVALUATIONS}/me", params={"page": 5, "page_size": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["total"] == 2
+
+
+async def test_my_evaluations_rejects_invalid_page_params(client, as_user, manager, active_cycle):
+    as_user(manager)
+
+    assert (await client.get(f"{EVALUATIONS}/me", params={"page": 0})).status_code == 422
+    assert (await client.get(f"{EVALUATIONS}/me", params={"page_size": 0})).status_code == 422
+    assert (await client.get(f"{EVALUATIONS}/me", params={"page_size": 101})).status_code == 422
 
 
 async def test_submitting_stores_and_returns_the_responses(client, as_user, employee, employee_self_eval):
