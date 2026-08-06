@@ -100,6 +100,24 @@ async def test_logout_revokes_the_refresh_token(client, company_admin):
     assert (await client.post(REFRESH)).status_code == 401
 
 
+async def test_login_is_rate_limited_after_five_attempts_per_minute(client, company_admin):
+    for _ in range(5):
+        response = await client.post(LOGIN, json={"email": company_admin.email, "password": "wrong-password"})
+        assert response.status_code == 401
+
+    sixth = await client.post(LOGIN, json={"email": company_admin.email, "password": "wrong-password"})
+    assert sixth.status_code == 429
+
+
+async def test_password_reset_request_is_rate_limited_after_three_attempts_per_minute(client, company_admin):
+    for _ in range(3):
+        response = await client.post(RESET_REQUEST, json={"email": company_admin.email})
+        assert response.status_code == 204
+
+    fourth = await client.post(RESET_REQUEST, json={"email": company_admin.email})
+    assert fourth.status_code == 429
+
+
 async def test_password_reset_does_not_reveal_whether_email_exists(client, company_admin):
     known = await client.post(RESET_REQUEST, json={"email": company_admin.email})
     unknown = await client.post(RESET_REQUEST, json={"email": "nobody@example.com"})
