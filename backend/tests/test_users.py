@@ -85,3 +85,12 @@ async def test_a_deactivated_users_token_is_rejected_on_the_next_request(client,
     response = await client.get("/api/v1/auth/me")
 
     assert response.status_code == 401
+
+
+async def test_company_admin_can_unassign_a_users_manager(client, as_user, company_admin, employee):
+    as_user(company_admin)
+
+    response = await client.post(f"{USERS}/{employee.id}/manager", json={"manager_id": None})
+
+    assert response.status_code == 200
+    assert response.json()["manager_id"] is None
