@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiFetchJson } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -63,6 +64,36 @@ describe('TeamPage', () => {
 
     expect(screen.getAllByRole('option', { name: 'Active Manager' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('option', { name: /Inactive Manager/ })).not.toBeInTheDocument();
+  });
+
+  // Deactivating hands the user's reports up to their skip-level manager, so rows other
+  // than the clicked one change server-side. Patching a single row would leave them stale.
+  it('re-fetches the whole team after a deactivation so handed-over rows update', async () => {
+    const user = userEvent.setup();
+    const reportUnderDeparting = { ...employee, manager_id: activeManager.id };
+    const reportAfterHandover = { ...employee, manager_id: 'skip-level-1' };
+    const skipLevel = {
+      id: 'skip-level-1',
+      full_name: 'Skip Level',
+      email: 'skip@acme.io',
+      role: 'manager',
+      manager_id: null,
+      is_active: true,
+    };
+
+    mockApiFetchJson
+      .mockResolvedValueOnce([reportUnderDeparting, activeManager, skipLevel]) // initial load
+      .mockResolvedValueOnce({ ...activeManager, is_active: false }) // the deactivate call
+      .mockResolvedValueOnce([reportAfterHandover, { ...activeManager, is_active: false }, skipLevel]);
+
+    render(<TeamPage />);
+    await screen.findByRole('heading', { name: 'Team' });
+
+    await user.click(screen.getAllByRole('button', { name: 'Deactivate' })[0]);
+
+    expect(await screen.findByText(/Active Manager/)).toBeInTheDocument();
+    const [reportRowSelect] = screen.getAllByRole('combobox');
+    expect(reportRowSelect).toHaveValue('skip-level-1');
   });
 
   it('still lists an already-assigned inactive manager so the current selection renders', async () => {
