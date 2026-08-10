@@ -21,6 +21,11 @@ async def list_users_by_company(db: AsyncSession, company_id: uuid.UUID) -> list
     return list(result.scalars().all())
 
 
+async def list_direct_reports(db: AsyncSession, manager_id: uuid.UUID) -> list[User]:
+    result = await db.execute(select(User).where(User.manager_id == manager_id))
+    return list(result.scalars().all())
+
+
 async def list_active_users_by_company(db: AsyncSession, company_id: uuid.UUID) -> list[User]:
     result = await db.execute(
         select(User).where(User.company_id == company_id, User.is_active.is_(True))

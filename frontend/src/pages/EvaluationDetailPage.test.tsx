@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { apiFetchJson, ApiError } from '@/lib/api';
@@ -70,6 +71,24 @@ describe('EvaluationDetailPage', () => {
     expect(await screen.findByText('Manager review')).toBeInTheDocument();
     expect(screen.getByText(/waiting on manager one/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /submit evaluation/i })).not.toBeInTheDocument();
+  });
+
+  // "Draft saved" used to stick around after further edits, implying the newest
+  // answer was persisted when it hadn't been sent yet.
+  it('retracts the "Draft saved" confirmation once an answer changes again', async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue({ user: { id: MANAGER_ID } } as ReturnType<typeof useAuth>);
+    mockApiFetchJson.mockResolvedValue({ ...baseEvaluation, status: 'in_progress' });
+
+    renderPage();
+    await screen.findByText('Evaluating Employee One');
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+    expect(await screen.findByText('Draft saved')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '3' }));
+
+    expect(screen.queryByText('Draft saved')).not.toBeInTheDocument();
   });
 
   it('shows the recorded responses instead of the form once the manager-eval is submitted', async () => {

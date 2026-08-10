@@ -305,3 +305,75 @@ async def test_only_the_assigned_evaluator_can_draft_save(client, as_user, emplo
     )
 
     assert response.status_code == 403
+
+
+async def test_draft_saving_then_submitting_keeps_one_response_per_question(
+    client, as_user, employee, employee_self_eval
+):
+    """Draft-save and submit share the same upsert, so a drafted answer must be updated, not duplicated."""
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    rating_question = next(q for q in detail["questions"] if q["type"] == "rating")
+
+    await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": rating_question["id"], "rating_value": 2}]},
+    )
+    response = await submit_evaluation(client, employee_self_eval["id"], rating=5)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "submitted"
+    assert len(body["responses"]) == len(body["questions"])
+    drafted = [r for r in body["responses"] if r["question_id"] == rating_question["id"]]
+    assert len(drafted) == 1
+    assert drafted[0]["rating_value"] == 5
+
+
+@pytest.mark.parametrize("bad_rating", [0, 6, -1])
+async def test_draft_save_rejects_a_rating_outside_one_to_five(client, as_user, employee, employee_self_eval, bad_rating):
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    rating_question = next(q for q in detail["questions"] if q["type"] == "rating")
+
+    response = await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": rating_question["id"], "rating_value": bad_rating}]},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_cannot_draft_save_into_a_closed_cycle(
+    client, as_user, company_admin, employee, active_cycle, employee_self_eval
+):
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    question_id = detail["questions"][0]["id"]
+
+    as_user(company_admin)
+    assert (await client.post(f"{CYCLES}/{active_cycle.id}/close")).status_code == 200
+
+    as_user(employee)
+    response = await client.patch(
+        f"{EVALUATIONS}/{employee_self_eval['id']}",
+        json={"responses": [{"question_id": question_id, "rating_value": 4}]},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_cannot_submit_into_a_closed_cycle(
+    client, as_user, company_admin, employee, active_cycle, employee_self_eval
+):
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+    body = build_responses(detail)
+
+    as_user(company_admin)
+    assert (await client.post(f"{CYCLES}/{active_cycle.id}/close")).status_code == 200
+
+    as_user(employee)
+    response = await client.post(f"{EVALUATIONS}/{employee_self_eval['id']}/submit", json=body)
+
+    assert response.status_code == 400

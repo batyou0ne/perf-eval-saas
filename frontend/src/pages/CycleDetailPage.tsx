@@ -48,6 +48,7 @@ export function CycleDetailPage() {
   const [progress, setProgress] = useState<CycleProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -75,6 +76,22 @@ export function CycleDetailPage() {
       setError(err instanceof ApiError ? err.message : 'Could not activate cycle');
     } finally {
       setActivating(false);
+    }
+  }
+
+  async function handleClose() {
+    if (!id) return;
+    setError(null);
+    setClosing(true);
+    try {
+      const updated = await apiFetchJson<{ status: CycleDetail['status'] }>(`/api/v1/cycles/${id}/close`, {
+        method: 'POST',
+      });
+      setCycle((current) => (current ? { ...current, status: updated.status } : current));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not close cycle');
+    } finally {
+      setClosing(false);
     }
   }
 
@@ -121,6 +138,11 @@ export function CycleDetailPage() {
             </Button>
           </div>
         )}
+        {cycle.status === 'active' && (
+          <Button variant="outline" onClick={handleClose} disabled={closing}>
+            {closing ? 'Closing…' : 'Close cycle'}
+          </Button>
+        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -165,6 +187,12 @@ export function CycleDetailPage() {
       {cycle.status === 'active' && (
         <p className="text-sm text-muted-foreground">
           This cycle is active — self and manager evaluations have been generated for everyone in the company.
+        </p>
+      )}
+
+      {cycle.status === 'closed' && (
+        <p className="text-sm text-muted-foreground">
+          This cycle is closed — evaluations are read-only and can no longer be edited or submitted.
         </p>
       )}
 

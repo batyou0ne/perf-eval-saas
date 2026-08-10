@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.evaluation import get_evaluation_by_id, list_evaluations_for_user, upsert_responses
 from app.models.evaluation import Evaluation, EvaluationStatus
+from app.models.evaluation_cycle import CycleStatus
 from app.models.question import QuestionType
 from app.models.user import User, UserRole
 from app.schemas.evaluation import (
@@ -110,6 +111,8 @@ def _authorize_evaluator_write(evaluation: Evaluation, current_user: User) -> No
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the assigned evaluator can update this evaluation")
     if evaluation.status == EvaluationStatus.SUBMITTED:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This evaluation has already been submitted")
+    if evaluation.cycle.status == CycleStatus.CLOSED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This review cycle has been closed")
 
 
 async def submit_responses(
