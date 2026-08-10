@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { apiFetchJson } from '@/lib/api';
@@ -112,5 +113,36 @@ describe('MyEvaluationsPage', () => {
 
     expect(await screen.findByText('Manager review')).toBeInTheDocument();
     expect(screen.getByRole('link')).toHaveAttribute('href', '/evaluations/eval-4');
+  });
+
+  // Guards the shared <Pager>: the control only appears when there's more than one page,
+  // and advancing it re-requests with the new page number.
+  it('pages through results when there is more than one page', async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue({ user: { id: EMPLOYEE_ID } } as ReturnType<typeof useAuth>);
+    const evaluation = (id: string) => ({
+      id,
+      cycle_name: 'H1 2026',
+      subject_name: 'Employee One',
+      evaluator_id: EMPLOYEE_ID,
+      type: 'self',
+      status: 'in_progress',
+    });
+    mockApiFetchJson.mockImplementation((path: string) =>
+      Promise.resolve({
+        items: [evaluation(path.includes('page=2') ? 'eval-2' : 'eval-1')],
+        total: 2,
+        page: path.includes('page=2') ? 2 : 1,
+        page_size: 1,
+      }),
+    );
+
+    renderPage();
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
+    expect(mockApiFetchJson).toHaveBeenLastCalledWith(expect.stringContaining('page=2'));
   });
 });

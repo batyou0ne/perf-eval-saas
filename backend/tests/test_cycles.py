@@ -57,10 +57,10 @@ async def test_cycle_list_is_scoped_to_the_callers_company(
     client, as_user, company_admin, other_company_admin, cycle
 ):
     as_user(company_admin)
-    assert [c["id"] for c in (await client.get(CYCLES)).json()] == [str(cycle.id)]
+    assert [c["id"] for c in (await client.get(CYCLES)).json()["items"]] == [str(cycle.id)]
 
     as_user(other_company_admin)
-    assert (await client.get(CYCLES)).json() == []
+    assert (await client.get(CYCLES)).json()["items"] == []
 
 
 async def test_cannot_read_another_companys_cycle(client, as_user, other_company_admin, cycle):
@@ -254,3 +254,22 @@ async def test_employee_cannot_close_a_cycle(client, as_user, employee, cycle):
 async def test_cannot_close_another_companys_cycle(client, as_user, other_company_admin, cycle):
     as_user(other_company_admin)
     assert (await client.post(f"{CYCLES}/{cycle.id}/close")).status_code == 404
+
+
+async def test_cycle_list_is_paginated(client, as_user, company_admin, cycle):
+    as_user(company_admin)
+    await client.post(CYCLES, json=NEW_CYCLE)
+
+    page_one = (await client.get(CYCLES, params={"page": 1, "page_size": 1})).json()
+    page_two = (await client.get(CYCLES, params={"page": 2, "page_size": 1})).json()
+
+    assert page_one["total"] == 2
+    assert len(page_one["items"]) == 1
+    assert page_one["items"][0]["id"] != page_two["items"][0]["id"]
+
+
+async def test_cycle_list_rejects_invalid_page_params(client, as_user, company_admin):
+    as_user(company_admin)
+
+    assert (await client.get(CYCLES, params={"page": 0})).status_code == 422
+    assert (await client.get(CYCLES, params={"page_size": 101})).status_code == 422

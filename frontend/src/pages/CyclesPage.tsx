@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetchJson } from '@/lib/api';
+import { PAGE_SIZE, totalPages, type Page } from '@/lib/pagination';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Pager } from '@/components/Pager';
 
 interface CycleSummary {
   id: string;
@@ -13,11 +15,13 @@ interface CycleSummary {
 }
 
 export function CyclesPage() {
-  const [cycles, setCycles] = useState<CycleSummary[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<Page<CycleSummary> | null>(null);
 
   useEffect(() => {
-    apiFetchJson<CycleSummary[]>('/api/v1/cycles').then(setCycles);
-  }, []);
+    setData(null);
+    apiFetchJson<Page<CycleSummary>>(`/api/v1/cycles?page=${page}&page_size=${PAGE_SIZE}`).then(setData);
+  }, [page]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,11 +32,11 @@ export function CyclesPage() {
         </Link>
       </div>
 
-      {cycles === null && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {cycles?.length === 0 && <p className="text-sm text-muted-foreground">No cycles yet.</p>}
+      {data === null && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {data?.items.length === 0 && <p className="text-sm text-muted-foreground">No cycles yet.</p>}
 
       <div className="flex flex-col gap-3">
-        {cycles?.map((cycle) => (
+        {data?.items.map((cycle) => (
           <Link key={cycle.id} to={`/cycles/${cycle.id}`}>
             <Card>
               <CardHeader>
@@ -48,6 +52,7 @@ export function CyclesPage() {
           </Link>
         ))}
       </div>
+      {data && <Pager page={page} totalPages={totalPages(data)} onPageChange={setPage} />}
     </div>
   );
 }

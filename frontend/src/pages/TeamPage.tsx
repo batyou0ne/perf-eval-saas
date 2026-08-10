@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { apiFetchJson, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { PAGE_SIZE, totalPages, type Page } from '@/lib/pagination';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Pager } from '@/components/Pager';
 
 interface TeamUser {
   id: string;
@@ -13,14 +15,30 @@ interface TeamUser {
   is_active: boolean;
 }
 
+/** Every active colleague, from the unpaginated picker feed — a manager on another page
+ *  still has to be selectable. */
+interface ManagerOption {
+  id: string;
+  full_name: string;
+}
+
+const USERS_PAGE = (page: number) => `/api/v1/users?page=${page}&page_size=${PAGE_SIZE}`;
+
 export function TeamPage() {
   const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<TeamUser[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<Page<TeamUser> | null>(null);
+  const [options, setOptions] = useState<ManagerOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetchJson<TeamUser[]>('/api/v1/users').then(setUsers);
+    setData(null);
+    apiFetchJson<Page<TeamUser>>(USERS_PAGE(page)).then(setData);
+  }, [page]);
+
+  useEffect(() => {
+    apiFetchJson<ManagerOption[]>('/api/v1/users/options').then(setOptions);
   }, []);
 
   async function handleManagerChange(userId: string, managerId: string) {
@@ -32,7 +50,9 @@ export function TeamPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_id: managerId || null }),
       });
-      setUsers((current) => current?.map((u) => (u.id === userId ? updated : u)) ?? null);
+      setData((current) =>
+        current ? { ...current, items: current.items.map((u) => (u.id === userId ? updated : u)) } : current,
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not assign manager');
     } finally {
@@ -47,8 +67,9 @@ export function TeamPage() {
       const action = user.is_active ? 'deactivate' : 'reactivate';
       await apiFetchJson<TeamUser>(`/api/v1/users/${user.id}/${action}`, { method: 'POST' });
       // Deactivating hands this user's reports up to their own manager, so other rows
-      // change too — re-fetch rather than patching just the row that was clicked.
-      setUsers(await apiFetchJson<TeamUser[]>('/api/v1/users'));
+      // change too — and it also changes who can be picked as a manager.
+      setData(await apiFetchJson<Page<TeamUser>>(USERS_PAGE(page)));
+      setOptions(await apiFetchJson<ManagerOption[]>('/api/v1/users/options'));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not update user status');
     } finally {
@@ -56,7 +77,11 @@ export function TeamPage() {
     }
   }
 
-  if (!users) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!data) return <p className="text-sm text-muted-foreground">Loading…</p>;
+
+  const optionsById = new Map(options.map((o) => [o.id, o.full_name]));
+  const nameFor = (id: string) =>
+    optionsById.get(id) ?? data.items.find((u) => u.id === id)?.full_name ?? 'Unknown user';
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,7 +92,7 @@ export function TeamPage() {
           <CardTitle>Set managers</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {users.map((u) => (
+          {data.items.map((u) => (
             <div
               key={u.id}
               className={`flex items-center justify-between gap-4 border-b pb-3 last:border-b-0 last:pb-0 ${u.is_active ? '' : 'opacity-50'}`}
@@ -87,16 +112,16 @@ export function TeamPage() {
                   onChange={(e) => handleManagerChange(u.id, e.target.value)}
                 >
                   <option value="">No manager</option>
-                  {users
-                    // Inactive users can't log in, so they'd never be able to complete a
-                    // manager evaluation — the backend rejects them too. An already-assigned
-                    // one stays listed so the current selection still renders.
+                  {/* The picker feed is active-only, so an inactive manager left over from
+                      older data has no option to select — surface it or the select renders blank. */}
+                  {u.manager_id && !optionsById.has(u.manager_id) && (
+                    <option value={u.manager_id}>{nameFor(u.manager_id)} (inactive)</option>
+                  )}
+                  {options
                     .filter((candidate) => candidate.id !== u.id)
-                    .filter((candidate) => candidate.is_active || candidate.id === u.manager_id)
                     .map((candidate) => (
                       <option key={candidate.id} value={candidate.id}>
                         {candidate.full_name}
-                        {candidate.is_active ? '' : ' (inactive)'}
                       </option>
                     ))}
                 </select>
@@ -116,6 +141,7 @@ export function TeamPage() {
           ))}
         </CardContent>
       </Card>
+      <Pager page={page} totalPages={totalPages(data)} onPageChange={setPage} />
     </div>
   );
 }
