@@ -143,7 +143,9 @@ function InviteTeammateForm({ isSuperAdmin, companies }: { isSuperAdmin: boolean
     <Card>
       <CardHeader>
         <CardTitle>{isSuperAdmin ? 'Invite a company admin' : 'Invite a teammate'}</CardTitle>
-        <CardDescription>No email sending yet — the invite link is shown here to copy/share.</CardDescription>
+        <CardDescription>
+          We'll email them an invite link. It's also shown here after sending, so you can share it directly.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

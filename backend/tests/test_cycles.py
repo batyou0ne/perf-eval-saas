@@ -187,3 +187,70 @@ async def test_editing_a_cycle_fully_replaces_its_questions(client, as_user, db_
     new_ids = {q["id"] for q in body["questions"]}
     assert len(body["questions"]) == 1
     assert new_ids.isdisjoint(original_ids)
+
+
+async def test_cannot_create_a_cycle_without_questions(client, as_user, company_admin):
+    """A question-less cycle would produce evaluations that are complete on arrival."""
+    as_user(company_admin)
+
+    response = await client.post(CYCLES, json={**NEW_CYCLE, "questions": []})
+
+    assert response.status_code == 422
+
+
+async def test_cannot_edit_a_cycle_down_to_zero_questions(client, as_user, company_admin, cycle):
+    as_user(company_admin)
+
+    response = await client.patch(f"{CYCLES}/{cycle.id}", json={**UPDATED_CYCLE, "questions": []})
+
+    assert response.status_code == 422
+
+
+async def test_activation_skips_the_manager_evaluation_when_the_manager_is_inactive(
+    client, as_user, db_session, company, company_admin, cycle
+):
+    """An inactive manager can't log in, so the evaluation would be unsubmittable forever."""
+    inactive_manager = await make_user(db_session, role=UserRole.MANAGER, company_id=company.id, is_active=False)
+    reportee = await make_user(
+        db_session, role=UserRole.EMPLOYEE, company_id=company.id, manager_id=inactive_manager.id
+    )
+    as_user(company_admin)
+
+    await client.post(f"{CYCLES}/{cycle.id}/activate")
+
+    evaluations = (await db_session.execute(select(Evaluation).where(Evaluation.cycle_id == cycle.id))).scalars().all()
+    assert reportee.id in {e.subject_id for e in evaluations if e.type == EvaluationType.SELF}
+    assert reportee.id not in {e.subject_id for e in evaluations if e.type == EvaluationType.MANAGER}
+
+
+async def test_company_admin_can_close_an_active_cycle(client, as_user, company_admin, cycle):
+    as_user(company_admin)
+    await client.post(f"{CYCLES}/{cycle.id}/activate")
+
+    response = await client.post(f"{CYCLES}/{cycle.id}/close")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "closed"
+
+
+async def test_cannot_close_a_draft_cycle(client, as_user, company_admin, cycle):
+    as_user(company_admin)
+    assert (await client.post(f"{CYCLES}/{cycle.id}/close")).status_code == 400
+
+
+async def test_a_cycle_cannot_be_closed_twice(client, as_user, company_admin, cycle):
+    as_user(company_admin)
+    await client.post(f"{CYCLES}/{cycle.id}/activate")
+
+    assert (await client.post(f"{CYCLES}/{cycle.id}/close")).status_code == 200
+    assert (await client.post(f"{CYCLES}/{cycle.id}/close")).status_code == 400
+
+
+async def test_employee_cannot_close_a_cycle(client, as_user, employee, cycle):
+    as_user(employee)
+    assert (await client.post(f"{CYCLES}/{cycle.id}/close")).status_code == 403
+
+
+async def test_cannot_close_another_companys_cycle(client, as_user, other_company_admin, cycle):
+    as_user(other_company_admin)
+    assert (await client.post(f"{CYCLES}/{cycle.id}/close")).status_code == 404

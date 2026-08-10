@@ -86,10 +86,15 @@ export function TeamPage() {
                 >
                   <option value="">No manager</option>
                   {users
+                    // Inactive users can't log in, so they'd never be able to complete a
+                    // manager evaluation — the backend rejects them too. An already-assigned
+                    // one stays listed so the current selection still renders.
                     .filter((candidate) => candidate.id !== u.id)
+                    .filter((candidate) => candidate.is_active || candidate.id === u.manager_id)
                     .map((candidate) => (
                       <option key={candidate.id} value={candidate.id}>
                         {candidate.full_name}
+                        {candidate.is_active ? '' : ' (inactive)'}
                       </option>
                     ))}
                 </select>

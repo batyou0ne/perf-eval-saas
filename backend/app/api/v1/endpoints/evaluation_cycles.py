@@ -68,6 +68,16 @@ async def activate_cycle(
     return await cycle_service.activate_cycle(db, cycle)
 
 
+@router.post("/cycles/{cycle_id}/close", response_model=CycleRead)
+async def close_cycle(
+    cycle_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
+) -> CycleRead:
+    cycle = await _get_owned_cycle(db, cycle_id, current_user)
+    return await cycle_service.close_cycle(db, cycle)
+
+
 @router.get("/cycles/{cycle_id}/progress", response_model=CycleProgress)
 async def get_cycle_progress(
     cycle_id: uuid.UUID,

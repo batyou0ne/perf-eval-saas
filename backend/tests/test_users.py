@@ -87,6 +87,23 @@ async def test_a_deactivated_users_token_is_rejected_on_the_next_request(client,
     assert response.status_code == 401
 
 
+async def test_hr_cannot_reactivate_a_company_admin(client, as_user, db_session, company, hr_user):
+    """Mirrors the deactivate rule — otherwise HR could undo an admin's decision about a peer admin."""
+    inactive_admin = await make_user(
+        db_session, role=UserRole.COMPANY_ADMIN, company_id=company.id, is_active=False
+    )
+    as_user(hr_user)
+
+    response = await client.post(f"{USERS}/{inactive_admin.id}/reactivate")
+
+    assert response.status_code == 403
+
+
+async def test_cannot_reactivate_a_user_in_another_company(client, as_user, other_company_admin, employee):
+    as_user(other_company_admin)
+    assert (await client.post(f"{USERS}/{employee.id}/reactivate")).status_code == 404
+
+
 async def test_company_admin_can_unassign_a_users_manager(client, as_user, company_admin, employee):
     as_user(company_admin)
 
@@ -94,3 +111,13 @@ async def test_company_admin_can_unassign_a_users_manager(client, as_user, compa
 
     assert response.status_code == 200
     assert response.json()["manager_id"] is None
+
+
+async def test_cannot_assign_an_inactive_user_as_manager(client, as_user, db_session, company, company_admin, employee):
+    """A deactivated manager can't log in, so their evaluation could never be completed."""
+    inactive_manager = await make_user(db_session, role=UserRole.MANAGER, company_id=company.id, is_active=False)
+    as_user(company_admin)
+
+    response = await client.post(f"{USERS}/{employee.id}/manager", json={"manager_id": str(inactive_manager.id)})
+
+    assert response.status_code == 400
