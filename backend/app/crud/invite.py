@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,8 +21,15 @@ async def get_invite_by_id(db: AsyncSession, invite_id: uuid.UUID) -> Invite | N
     return result.scalar_one_or_none()
 
 
-async def list_invites_by_company(db: AsyncSession, company_id: uuid.UUID) -> list[Invite]:
+async def list_invites_by_company(
+    db: AsyncSession, company_id: uuid.UUID, offset: int, limit: int
+) -> tuple[list[Invite], int]:
+    total = await db.scalar(select(func.count()).select_from(Invite).where(Invite.company_id == company_id))
     result = await db.execute(
-        select(Invite).where(Invite.company_id == company_id).order_by(Invite.created_at.desc())
+        select(Invite)
+        .where(Invite.company_id == company_id)
+        .order_by(Invite.created_at.desc())
+        .offset(offset)
+        .limit(limit)
     )
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total or 0
