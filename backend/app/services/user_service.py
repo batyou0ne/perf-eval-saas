@@ -31,6 +31,10 @@ async def assign_manager(
     manager = await get_user_by_id(db, manager_id)
     if manager is None or manager.company_id != actor.company_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Manager must belong to the same company")
+    # A deactivated user can't log in, so any manager evaluation assigned to them
+    # would be impossible to complete (see activate_cycle, which skips them too).
+    if not manager.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Manager must be an active user")
 
     target.manager_id = manager_id
     await db.commit()
@@ -55,6 +59,11 @@ async def deactivate_user(db: AsyncSession, actor: User, target_user_id: uuid.UU
 
 async def reactivate_user(db: AsyncSession, actor: User, target_user_id: uuid.UUID) -> User:
     target = await _get_target_in_company(db, actor, target_user_id)
+
+    # Mirrors deactivate_user: without this, HR could undo a company admin's
+    # deactivation of a peer admin — a boundary HR can't cross in the other direction.
+    if actor.role == UserRole.HR and target.role == UserRole.COMPANY_ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "HR cannot reactivate a company admin")
 
     target.is_active = True
     await db.commit()
