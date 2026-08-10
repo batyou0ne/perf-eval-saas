@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.cookies import set_refresh_cookie
@@ -11,6 +11,7 @@ from app.crud.invite import get_invite_by_token, list_invites_by_company
 from app.models.user import User, UserRole
 from app.schemas.auth import TokenResponse
 from app.schemas.invite import InviteAccept, InviteCreate, InviteCreateResponse, InvitePreview, InviteRead
+from app.schemas.pagination import Page
 from app.services import auth_service, email_service, invite_service
 
 router = APIRouter()
@@ -35,12 +36,19 @@ async def create_invite(
     )
 
 
-@router.get("/invites", response_model=list[InviteRead])
+@router.get("/invites", response_model=Page[InviteRead])
 async def list_invites(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN)),
-) -> list[InviteRead]:
-    return await list_invites_by_company(db, current_user.company_id)
+) -> Page[InviteRead]:
+    invites, total = await list_invites_by_company(
+        db, current_user.company_id, offset=(page - 1) * page_size, limit=page_size
+    )
+    return Page(
+        items=[InviteRead.model_validate(i) for i in invites], total=total, page=page, page_size=page_size
+    )
 
 
 @router.get("/invites/{token}", response_model=InvitePreview)

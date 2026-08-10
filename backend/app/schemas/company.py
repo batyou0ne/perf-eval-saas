@@ -14,3 +14,12 @@ class CompanyRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CompanyOption(BaseModel):
+    """Just enough to render a picker — kept slim because this list isn't paginated."""
+
+    id: uuid.UUID
+    name: str
+
+    model_config = {"from_attributes": True}

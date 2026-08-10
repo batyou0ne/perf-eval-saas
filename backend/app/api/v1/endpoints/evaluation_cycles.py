@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
@@ -9,6 +9,7 @@ from app.crud.evaluation_cycle import get_cycle_by_id, list_cycles_by_company
 from app.models.evaluation_cycle import EvaluationCycle
 from app.models.user import User, UserRole
 from app.schemas.evaluation_cycle import CycleCreate, CycleDetail, CycleProgress, CycleRead, CycleUpdate
+from app.schemas.pagination import Page
 from app.services import cycle_service
 
 router = APIRouter()
@@ -30,12 +31,19 @@ async def create_cycle(
     return await cycle_service.create_cycle(db, current_user.company_id, body)
 
 
-@router.get("/cycles", response_model=list[CycleRead])
+@router.get("/cycles", response_model=Page[CycleRead])
 async def list_cycles(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.COMPANY_ADMIN, UserRole.HR)),
-) -> list[CycleRead]:
-    return await list_cycles_by_company(db, current_user.company_id)
+) -> Page[CycleRead]:
+    cycles, total = await list_cycles_by_company(
+        db, current_user.company_id, offset=(page - 1) * page_size, limit=page_size
+    )
+    return Page(
+        items=[CycleRead.model_validate(c) for c in cycles], total=total, page=page, page_size=page_size
+    )
 
 
 @router.get("/cycles/{cycle_id}", response_model=CycleDetail)
