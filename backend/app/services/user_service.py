@@ -3,7 +3,8 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.user import get_user_by_id
+from app.crud.evaluation import list_open_manager_evaluations_for_evaluator
+from app.crud.user import get_user_by_id, list_direct_reports
 from app.models.user import User, UserRole
 
 
@@ -42,6 +43,45 @@ async def assign_manager(
     return target
 
 
+async def _hand_over_management(db: AsyncSession, target: User) -> None:
+    """Move a departing manager's reports and unfinished reviews up to their own manager.
+
+    Without this, the reports keep pointing at someone who can no longer log in — so future
+    cycles silently generate no manager evaluation for them — and any review already assigned
+    to the departing manager could never be submitted.
+    """
+    reports = await list_direct_reports(db, target.id)
+    open_evaluations = await list_open_manager_evaluations_for_evaluator(db, target.id)
+    if not reports and not open_evaluations:
+        return
+
+    if target.manager_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This user still manages people and has no manager of their own to hand that over to. "
+            "Give them a manager, or reassign their reports, before deactivating.",
+        )
+
+    skip_level = await get_user_by_id(db, target.manager_id)
+    if skip_level is None or not skip_level.is_active:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This user's own manager is inactive, so there's nobody to hand their reports to. "
+            "Reassign the reports before deactivating.",
+        )
+    # A reporting loop would otherwise make someone their own manager or their own reviewer.
+    if skip_level.manager_id == target.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This user and their manager report to each other — fix the reporting loop first.",
+        )
+
+    for report in reports:
+        report.manager_id = skip_level.id
+    for evaluation in open_evaluations:
+        evaluation.evaluator_id = skip_level.id
+
+
 async def deactivate_user(db: AsyncSession, actor: User, target_user_id: uuid.UUID) -> User:
     target = await _get_target_in_company(db, actor, target_user_id)
 
@@ -50,6 +90,10 @@ async def deactivate_user(db: AsyncSession, actor: User, target_user_id: uuid.UU
     # HR manages the rank-and-file but not the company's admins.
     if actor.role == UserRole.HR and target.role == UserRole.COMPANY_ADMIN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "HR cannot deactivate a company admin")
+
+    # Reassigns in the same transaction as the deactivation, so we never leave reports
+    # or reviews pointing at a user who can't log in.
+    await _hand_over_management(db, target)
 
     target.is_active = False
     await db.commit()
