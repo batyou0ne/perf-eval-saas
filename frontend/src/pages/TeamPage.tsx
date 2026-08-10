@@ -45,8 +45,10 @@ export function TeamPage() {
     setSavingId(user.id);
     try {
       const action = user.is_active ? 'deactivate' : 'reactivate';
-      const updated = await apiFetchJson<TeamUser>(`/api/v1/users/${user.id}/${action}`, { method: 'POST' });
-      setUsers((current) => current?.map((u) => (u.id === user.id ? updated : u)) ?? null);
+      await apiFetchJson<TeamUser>(`/api/v1/users/${user.id}/${action}`, { method: 'POST' });
+      // Deactivating hands this user's reports up to their own manager, so other rows
+      // change too — re-fetch rather than patching just the row that was clicked.
+      setUsers(await apiFetchJson<TeamUser[]>('/api/v1/users'));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not update user status');
     } finally {
