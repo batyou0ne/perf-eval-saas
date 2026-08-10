@@ -61,10 +61,13 @@ async def activate_cycle(db: AsyncSession, cycle: EvaluationCycle) -> Evaluation
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only draft cycles can be activated")
 
     users = await list_active_users_by_company(db, cycle.company_id)
+    active_user_ids = {u.id for u in users}
     for user in users:
         db.add(Evaluation(cycle_id=cycle.id, subject_id=user.id, evaluator_id=user.id, type=EvaluationType.SELF))
         # Only employees are reviewed by a manager; managers/admins/HR only self-evaluate.
-        if user.manager_id is not None and user.role == UserRole.EMPLOYEE:
+        # The manager has to be active too — a deactivated one can't log in, so the
+        # evaluation would sit unsubmittable forever and skew the cycle's progress.
+        if user.role == UserRole.EMPLOYEE and user.manager_id in active_user_ids:
             db.add(
                 Evaluation(
                     cycle_id=cycle.id,
@@ -75,6 +78,17 @@ async def activate_cycle(db: AsyncSession, cycle: EvaluationCycle) -> Evaluation
             )
 
     cycle.status = CycleStatus.ACTIVE
+    await db.commit()
+    await db.refresh(cycle)
+    return cycle
+
+
+async def close_cycle(db: AsyncSession, cycle: EvaluationCycle) -> EvaluationCycle:
+    """End a review period: existing evaluations stay readable but can no longer be written to."""
+    if cycle.status != CycleStatus.ACTIVE:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only active cycles can be closed")
+
+    cycle.status = CycleStatus.CLOSED
     await db.commit()
     await db.refresh(cycle)
     return cycle

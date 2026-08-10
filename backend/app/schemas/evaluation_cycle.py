@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.evaluation import EvaluationStatus
 from app.models.evaluation_cycle import CycleStatus
@@ -27,14 +27,16 @@ class CycleCreate(BaseModel):
     name: str
     start_date: date
     end_date: date
-    questions: list[QuestionCreate]
+    # A question-less cycle would generate evaluations that are "complete" the moment
+    # they're created, so there's never a valid reason to save one.
+    questions: list[QuestionCreate] = Field(min_length=1)
 
 
 class CycleUpdate(BaseModel):
     name: str
     start_date: date
     end_date: date
-    questions: list[QuestionCreate]
+    questions: list[QuestionCreate] = Field(min_length=1)
 
 
 class CycleRead(BaseModel):

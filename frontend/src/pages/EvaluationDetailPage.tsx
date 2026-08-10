@@ -72,6 +72,13 @@ export function EvaluationDetailPage() {
 
   const canFillOut = user?.id === evaluation.evaluator_id && evaluation.status !== 'submitted';
 
+  // Editing invalidates the "Draft saved" confirmation — leaving it up would claim
+  // the newest answer is persisted when it isn't.
+  function updateAnswer(questionId: string, answer: Answer) {
+    setAnswers((a) => ({ ...a, [questionId]: answer }));
+    setDraftSaved(false);
+  }
+
   async function handleSaveDraft() {
     if (!id) return;
     setDraftError(null);
@@ -151,7 +158,7 @@ export function EvaluationDetailPage() {
                           <button
                             key={n}
                             type="button"
-                            onClick={() => setAnswers((a) => ({ ...a, [q.id]: { rating_value: n } }))}
+                            onClick={() => updateAnswer(q.id, { rating_value: n })}
                             className={
                               'flex size-8 items-center justify-center rounded-lg border text-sm ' +
                               (selected
@@ -168,7 +175,7 @@ export function EvaluationDetailPage() {
                     <textarea
                       className="min-h-20 rounded-lg border border-input bg-transparent p-2.5 text-sm"
                       value={answers[q.id]?.text_value ?? ''}
-                      onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: { text_value: e.target.value } }))}
+                      onChange={(e) => updateAnswer(q.id, { text_value: e.target.value })}
                     />
                   )}
                 </div>

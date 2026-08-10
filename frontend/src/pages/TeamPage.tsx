@@ -45,8 +45,10 @@ export function TeamPage() {
     setSavingId(user.id);
     try {
       const action = user.is_active ? 'deactivate' : 'reactivate';
-      const updated = await apiFetchJson<TeamUser>(`/api/v1/users/${user.id}/${action}`, { method: 'POST' });
-      setUsers((current) => current?.map((u) => (u.id === user.id ? updated : u)) ?? null);
+      await apiFetchJson<TeamUser>(`/api/v1/users/${user.id}/${action}`, { method: 'POST' });
+      // Deactivating hands this user's reports up to their own manager, so other rows
+      // change too — re-fetch rather than patching just the row that was clicked.
+      setUsers(await apiFetchJson<TeamUser[]>('/api/v1/users'));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not update user status');
     } finally {
@@ -86,10 +88,15 @@ export function TeamPage() {
                 >
                   <option value="">No manager</option>
                   {users
+                    // Inactive users can't log in, so they'd never be able to complete a
+                    // manager evaluation — the backend rejects them too. An already-assigned
+                    // one stays listed so the current selection still renders.
                     .filter((candidate) => candidate.id !== u.id)
+                    .filter((candidate) => candidate.is_active || candidate.id === u.manager_id)
                     .map((candidate) => (
                       <option key={candidate.id} value={candidate.id}>
                         {candidate.full_name}
+                        {candidate.is_active ? '' : ' (inactive)'}
                       </option>
                     ))}
                 </select>
