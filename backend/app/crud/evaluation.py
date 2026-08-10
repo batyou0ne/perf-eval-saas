@@ -5,11 +5,32 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.evaluation import Evaluation
-from app.models.evaluation_cycle import EvaluationCycle
+from app.models.evaluation import Evaluation, EvaluationStatus, EvaluationType
+from app.models.evaluation_cycle import CycleStatus, EvaluationCycle
 from app.models.response import Response
 from app.models.user import User
 from app.schemas.evaluation import ResponseInput
+
+
+async def list_open_manager_evaluations_for_evaluator(
+    db: AsyncSession, evaluator_id: uuid.UUID
+) -> list[Evaluation]:
+    """Manager evaluations this user still owes — what a handover has to move to someone else.
+
+    Skips closed cycles: those can't be written to either way, so reassigning them would
+    only hand the new evaluator work they're not allowed to do.
+    """
+    result = await db.execute(
+        select(Evaluation)
+        .join(EvaluationCycle, Evaluation.cycle_id == EvaluationCycle.id)
+        .where(
+            Evaluation.evaluator_id == evaluator_id,
+            Evaluation.type == EvaluationType.MANAGER,
+            Evaluation.status != EvaluationStatus.SUBMITTED,
+            EvaluationCycle.status != CycleStatus.CLOSED,
+        )
+    )
+    return list(result.scalars().all())
 
 
 async def list_evaluations_for_user(
