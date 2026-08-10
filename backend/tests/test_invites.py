@@ -15,7 +15,7 @@ def _token_from(response) -> str:
 
 
 async def _invite_id_for(client, email: str) -> str:
-    invites = (await client.get(INVITES)).json()
+    invites = (await client.get(INVITES)).json()["items"]
     return next(i["id"] for i in invites if i["email"] == email)
 
 
@@ -191,9 +191,9 @@ async def test_company_admin_can_list_pending_invites(client, as_user, company_a
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["email"] == "pending@example.com"
-    assert body[0]["accepted_at"] is None
+    assert body["total"] == 1
+    assert body["items"][0]["email"] == "pending@example.com"
+    assert body["items"][0]["accepted_at"] is None
 
 
 async def test_invite_list_is_scoped_to_the_callers_company(client, as_user, company_admin, other_company_admin):
@@ -203,7 +203,7 @@ async def test_invite_list_is_scoped_to_the_callers_company(client, as_user, com
     as_user(other_company_admin)
     response = await client.get(INVITES)
 
-    assert response.json() == []
+    assert response.json()["items"] == []
 
 
 async def test_hr_cannot_list_invites(client, as_user, db_session, company):
@@ -225,7 +225,7 @@ async def test_company_admin_can_cancel_a_pending_invite(client, as_user, compan
     response = await client.delete(f"{INVITES}/{invite_id}")
 
     assert response.status_code == 204
-    assert (await client.get(INVITES)).json() == []
+    assert (await client.get(INVITES)).json()["items"] == []
 
 
 async def test_cannot_cancel_an_already_accepted_invite(client, as_user, company_admin):
@@ -306,3 +306,16 @@ async def test_cannot_resend_another_companys_invite(client, as_user, company_ad
     response = await client.post(f"{INVITES}/{invite_id}/resend")
 
     assert response.status_code == 404
+
+
+async def test_invite_list_is_paginated(client, as_user, company_admin):
+    as_user(company_admin)
+    await client.post(INVITES, json={"email": "one@example.com", "role": "employee"})
+    await client.post(INVITES, json={"email": "two@example.com", "role": "employee"})
+
+    page_one = (await client.get(INVITES, params={"page": 1, "page_size": 1})).json()
+    page_two = (await client.get(INVITES, params={"page": 2, "page_size": 1})).json()
+
+    assert page_one["total"] == 2
+    assert len(page_one["items"]) == 1
+    assert page_one["items"][0]["id"] != page_two["items"][0]["id"]

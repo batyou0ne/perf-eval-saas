@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { apiFetchJson, ApiError } from '@/lib/api';
+import { PAGE_SIZE, totalPages, type Page } from '@/lib/pagination';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Pager } from '@/components/Pager';
 
 interface InviteRow {
   id: string;
@@ -12,6 +14,8 @@ interface InviteRow {
   accepted_at: string | null;
 }
 
+const INVITES_PAGE = (page: number) => `/api/v1/invites?page=${page}&page_size=${PAGE_SIZE}`;
+
 type InviteStatus = 'pending' | 'accepted' | 'expired';
 
 function statusOf(invite: InviteRow): InviteStatus {
@@ -21,25 +25,27 @@ function statusOf(invite: InviteRow): InviteStatus {
 }
 
 export function InvitesPage() {
-  const [invites, setInvites] = useState<InviteRow[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<Page<InviteRow> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [resentLink, setResentLink] = useState<{ id: string; link: string } | null>(null);
 
   function refetch() {
-    return apiFetchJson<InviteRow[]>('/api/v1/invites').then(setInvites);
+    return apiFetchJson<Page<InviteRow>>(INVITES_PAGE(page)).then(setData);
   }
 
   useEffect(() => {
-    refetch();
-  }, []);
+    apiFetchJson<Page<InviteRow>>(INVITES_PAGE(page)).then(setData);
+  }, [page]);
 
   async function handleCancel(id: string) {
     setError(null);
     setBusyId(id);
     try {
       await apiFetchJson(`/api/v1/invites/${id}`, { method: 'DELETE' });
-      setInvites((current) => current?.filter((i) => i.id !== id) ?? null);
+      // Removing a row pulls later pages forward, so re-read rather than splicing locally.
+      await refetch();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not cancel invite');
     } finally {
@@ -52,8 +58,8 @@ export function InvitesPage() {
     setResentLink(null);
     setBusyId(id);
     try {
-      const data = await apiFetchJson<{ invite_link: string }>(`/api/v1/invites/${id}/resend`, { method: 'POST' });
-      setResentLink({ id, link: data.invite_link });
+      const resent = await apiFetchJson<{ invite_link: string }>(`/api/v1/invites/${id}/resend`, { method: 'POST' });
+      setResentLink({ id, link: resent.invite_link });
       await refetch();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not resend invite');
@@ -62,7 +68,7 @@ export function InvitesPage() {
     }
   }
 
-  if (!invites) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!data) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,8 +79,8 @@ export function InvitesPage() {
           <CardTitle>Sent invites</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {invites.length === 0 && <p className="text-sm text-muted-foreground">No invites yet.</p>}
-          {invites.map((invite) => {
+          {data.items.length === 0 && <p className="text-sm text-muted-foreground">No invites yet.</p>}
+          {data.items.map((invite) => {
             const status = statusOf(invite);
             return (
               <div key={invite.id} className="flex flex-col gap-2 border-b pb-3 last:border-b-0 last:pb-0">
@@ -116,6 +122,7 @@ export function InvitesPage() {
           })}
         </CardContent>
       </Card>
+      <Pager page={page} totalPages={totalPages(data)} onPageChange={setPage} />
     </div>
   );
 }
