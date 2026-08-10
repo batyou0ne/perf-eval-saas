@@ -236,3 +236,67 @@ async def test_an_employee_with_no_reports_can_still_be_deactivated_without_a_ma
     as_user(company_admin)
 
     assert (await client.post(f"{USERS}/{loner.id}/deactivate")).status_code == 200
+
+
+# --- pagination and the picker feed ------------------------------------------
+
+
+async def test_user_list_is_paginated(client, as_user, db_session, company, company_admin):
+    await make_user(db_session, role=UserRole.EMPLOYEE, company_id=company.id)
+    await make_user(db_session, role=UserRole.EMPLOYEE, company_id=company.id)
+    as_user(company_admin)
+
+    page_one = (await client.get(USERS, params={"page": 1, "page_size": 2})).json()
+    page_two = (await client.get(USERS, params={"page": 2, "page_size": 2})).json()
+
+    assert page_one["total"] == 3
+    assert len(page_one["items"]) == 2
+    assert len(page_two["items"]) == 1
+    ids = {u["id"] for u in page_one["items"]} | {u["id"] for u in page_two["items"]}
+    assert len(ids) == 3
+
+
+async def test_user_list_rejects_invalid_page_params(client, as_user, company_admin):
+    as_user(company_admin)
+
+    assert (await client.get(USERS, params={"page": 0})).status_code == 422
+    assert (await client.get(USERS, params={"page_size": 101})).status_code == 422
+
+
+async def test_user_options_return_every_active_colleague_unpaginated(
+    client, as_user, db_session, company, company_admin
+):
+    """The manager picker breaks if a candidate is missing, so this list must not be paginated."""
+    for _ in range(3):
+        await make_user(db_session, role=UserRole.EMPLOYEE, company_id=company.id)
+    as_user(company_admin)
+
+    options = (await client.get(f"{USERS}/options")).json()
+
+    # 3 employees + the admin, i.e. more than a single page of the paginated list above.
+    assert len(options) == 4
+    assert all(set(o) == {"id", "full_name"} for o in options)
+
+
+async def test_user_options_exclude_inactive_users(client, as_user, db_session, company, company_admin):
+    inactive = await make_user(db_session, role=UserRole.EMPLOYEE, company_id=company.id, is_active=False)
+    as_user(company_admin)
+
+    options = (await client.get(f"{USERS}/options")).json()
+
+    assert str(inactive.id) not in {o["id"] for o in options}
+
+
+async def test_user_options_are_scoped_to_the_callers_company(
+    client, as_user, db_session, other_company, other_company_admin, employee
+):
+    as_user(other_company_admin)
+
+    options = (await client.get(f"{USERS}/options")).json()
+
+    assert str(employee.id) not in {o["id"] for o in options}
+
+
+async def test_employee_cannot_read_user_options(client, as_user, employee):
+    as_user(employee)
+    assert (await client.get(f"{USERS}/options")).status_code == 403

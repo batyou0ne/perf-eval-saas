@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetchJson } from '@/lib/api';
+import { PAGE_SIZE, totalPages, type Page } from '@/lib/pagination';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-
-const PAGE_SIZE = 20;
+import { Pager } from '@/components/Pager';
 
 interface EvaluationSummary {
   id: string;
@@ -14,13 +13,6 @@ interface EvaluationSummary {
   evaluator_id: string;
   type: 'self' | 'manager';
   status: 'not_started' | 'in_progress' | 'submitted';
-}
-
-interface Page<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
 }
 
 function cardTitle(e: EvaluationSummary, currentUserId: string | undefined): string {
@@ -42,8 +34,6 @@ export function MyEvaluationsPage() {
   }, [page]);
 
   if (data === null) return <p className="text-sm text-muted-foreground">Loading…</p>;
-
-  const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
 
   return (
     <div className="flex flex-col gap-6">
@@ -76,19 +66,7 @@ export function MyEvaluationsPage() {
           );
         })}
       </div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button variant="outline" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-            Next
-          </Button>
-        </div>
-      )}
+      <Pager page={page} totalPages={totalPages(data)} onPageChange={setPage} />
     </div>
   );
 }

@@ -18,7 +18,9 @@ export function DashboardPage() {
 
   const refetchCompanies = useCallback(() => {
     if (!isSuperAdmin) return;
-    apiFetchJson<Company[]>('/api/v1/companies')
+    // The picker feed rather than the paginated list: a company on page 2 still has to be
+    // selectable when inviting its first admin.
+    apiFetchJson<Company[]>('/api/v1/companies/options')
       .then(setCompanies)
       .catch(() => {});
   }, [isSuperAdmin]);
