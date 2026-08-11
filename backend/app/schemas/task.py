@@ -25,6 +25,14 @@ class TaskAssign(BaseModel):
     assignee_id: uuid.UUID
 
 
+class TaskEvidence(BaseModel):
+    """A finished task as it appears on an evaluation form — just enough to cite as evidence."""
+
+    id: uuid.UUID
+    title: str
+    completed_at: datetime
+
+
 class TaskRead(BaseModel):
     id: uuid.UUID
     title: str

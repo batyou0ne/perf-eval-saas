@@ -5,9 +5,11 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.evaluation import get_evaluation_by_id, list_evaluations_for_user, upsert_responses
+from app.crud.task import list_completed_tasks_for_subject_in_range
 from app.models.evaluation import Evaluation, EvaluationStatus
 from app.models.evaluation_cycle import CycleStatus
 from app.models.question import QuestionType
+from app.models.task import Task
 from app.models.user import User, UserRole
 from app.schemas.evaluation import (
     EvaluationDetail,
@@ -19,6 +21,7 @@ from app.schemas.evaluation import (
 )
 from app.schemas.evaluation_cycle import QuestionRead
 from app.schemas.pagination import Page
+from app.schemas.task import TaskEvidence
 
 
 def can_view_evaluation(current_user: User, evaluation: Evaluation) -> bool:
@@ -35,7 +38,17 @@ def can_view_evaluation(current_user: User, evaluation: Evaluation) -> bool:
     return False
 
 
-def _to_detail(evaluation: Evaluation) -> EvaluationDetail:
+async def _fetch_completed_tasks(db: AsyncSession, evaluation: Evaluation) -> list[Task]:
+    return await list_completed_tasks_for_subject_in_range(
+        db,
+        evaluation.cycle.company_id,
+        evaluation.subject_id,
+        evaluation.cycle.start_date,
+        evaluation.cycle.end_date,
+    )
+
+
+def _to_detail(evaluation: Evaluation, completed_tasks: list[Task]) -> EvaluationDetail:
     return EvaluationDetail(
         id=evaluation.id,
         cycle_id=evaluation.cycle_id,
@@ -57,6 +70,9 @@ def _to_detail(evaluation: Evaluation) -> EvaluationDetail:
                 text_value=r.text_value,
             )
             for r in evaluation.responses
+        ],
+        completed_tasks=[
+            TaskEvidence(id=t.id, title=t.title, completed_at=t.completed_at) for t in completed_tasks
         ],
     )
 
@@ -94,7 +110,7 @@ async def get_evaluation_detail(db: AsyncSession, evaluation_id: uuid.UUID, curr
         )
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
 
-    return _to_detail(evaluation)
+    return _to_detail(evaluation, await _fetch_completed_tasks(db, evaluation))
 
 
 def _validate_answer(question, response_input: ResponseInput) -> None:
@@ -138,7 +154,8 @@ async def submit_responses(
     evaluation.submitted_at = datetime.now(timezone.utc)
     await db.commit()
 
-    return _to_detail(await get_evaluation_by_id(db, evaluation.id))
+    evaluation = await get_evaluation_by_id(db, evaluation.id)
+    return _to_detail(evaluation, await _fetch_completed_tasks(db, evaluation))
 
 
 async def save_draft(
@@ -164,4 +181,5 @@ async def save_draft(
         evaluation.status = EvaluationStatus.IN_PROGRESS
     await db.commit()
 
-    return _to_detail(await get_evaluation_by_id(db, evaluation.id))
+    evaluation = await get_evaluation_by_id(db, evaluation.id)
+    return _to_detail(evaluation, await _fetch_completed_tasks(db, evaluation))
