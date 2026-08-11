@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     evaluations,
     health,
     invites,
+    tasks,
     users,
 )
 
@@ -20,3 +21,4 @@ api_router.include_router(users.router, tags=["users"])
 api_router.include_router(evaluation_cycles.router, tags=["evaluation-cycles"])
 api_router.include_router(evaluations.router, tags=["evaluations"])
 api_router.include_router(evaluation_summaries.router, tags=["evaluation-summaries"])
+api_router.include_router(tasks.router, tags=["tasks"])

@@ -6,6 +6,8 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const canManage = user?.role === 'company_admin' || user?.role === 'hr';
   const isCompanyAdmin = user?.role === 'company_admin';
+  // Tasks are a per-company concern — super_admin has no company_id and the API rejects them.
+  const canUseTasks = user?.role !== 'super_admin';
 
   return (
     <div className="min-h-svh">
@@ -17,6 +19,11 @@ export function AppLayout() {
           <Link to="/evaluations" className="text-sm text-muted-foreground hover:text-foreground">
             My Evaluations
           </Link>
+          {canUseTasks && (
+            <Link to="/tasks" className="text-sm text-muted-foreground hover:text-foreground">
+              Tasks
+            </Link>
+          )}
           {canManage && (
             <>
               <Link to="/cycles" className="text-sm text-muted-foreground hover:text-foreground">
