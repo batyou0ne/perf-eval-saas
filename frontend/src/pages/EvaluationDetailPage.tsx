@@ -21,6 +21,12 @@ interface ResponseRead {
   text_value: string | null;
 }
 
+interface TaskEvidence {
+  id: string;
+  title: string;
+  completed_at: string;
+}
+
 interface EvaluationDetail {
   id: string;
   cycle_id: string;
@@ -33,6 +39,7 @@ interface EvaluationDetail {
   status: 'not_started' | 'in_progress' | 'submitted';
   questions: Question[];
   responses: ResponseRead[];
+  completed_tasks: TaskEvidence[];
 }
 
 type Answer = { rating_value?: number; text_value?: string };
@@ -142,6 +149,26 @@ export function EvaluationDetailPage() {
         </h1>
         <p className="text-sm text-muted-foreground">{evaluation.cycle_name}</p>
       </div>
+
+      {evaluation.completed_tasks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Completed tasks this period</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col gap-2">
+              {evaluation.completed_tasks.map((t) => (
+                <li key={t.id} className="text-sm text-foreground">
+                  {t.title}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {new Date(t.completed_at).toLocaleDateString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="flex flex-col gap-5">

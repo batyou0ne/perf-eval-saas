@@ -37,6 +37,7 @@ const baseEvaluation = {
   responses: [
     { question_id: 'q1', question_text: 'How is communication?', question_type: 'rating' as const, rating_value: 4, text_value: null },
   ],
+  completed_tasks: [] as { id: string; title: string; completed_at: string }[],
 };
 
 function renderPage() {
@@ -105,5 +106,29 @@ describe('EvaluationDetailPage', () => {
     expect(screen.getByText('How is communication?')).toBeInTheDocument();
     expect(screen.getByText('4 / 5')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /submit evaluation/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the completed-tasks panel when the subject finished work during the cycle', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: MANAGER_ID } } as ReturnType<typeof useAuth>);
+    mockApiFetchJson.mockResolvedValue({
+      ...baseEvaluation,
+      status: 'in_progress',
+      completed_tasks: [{ id: 'task-1', title: 'Shipped the onboarding flow', completed_at: '2026-02-10T00:00:00Z' }],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Completed tasks this period')).toBeInTheDocument();
+    expect(screen.getByText('Shipped the onboarding flow')).toBeInTheDocument();
+  });
+
+  it('omits the completed-tasks panel when there are none', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: MANAGER_ID } } as ReturnType<typeof useAuth>);
+    mockApiFetchJson.mockResolvedValue({ ...baseEvaluation, status: 'in_progress' });
+
+    renderPage();
+    await screen.findByText('Evaluating Employee One');
+
+    expect(screen.queryByText('Completed tasks this period')).not.toBeInTheDocument();
   });
 });

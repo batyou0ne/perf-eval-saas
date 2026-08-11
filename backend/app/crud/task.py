@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,5 +62,25 @@ async def list_open_tasks_for_assignee(db: AsyncSession, assignee_id: uuid.UUID)
             Task.assignee_id == assignee_id,
             Task.status.in_((TaskStatus.TODO, TaskStatus.IN_PROGRESS)),
         )
+    )
+    return list(result.scalars().all())
+
+
+async def list_completed_tasks_for_subject_in_range(
+    db: AsyncSession, company_id: uuid.UUID, subject_id: uuid.UUID, start_date: date, end_date: date
+) -> list[Task]:
+    """A person's finished work within a review cycle's window — the evidence an
+    evaluation form and the AI summary draw on instead of relying on memory alone."""
+    result = await db.execute(
+        select(Task)
+        .where(
+            Task.company_id == company_id,
+            Task.assignee_id == subject_id,
+            Task.status == TaskStatus.DONE,
+            Task.completed_at.is_not(None),
+            func.date(Task.completed_at) >= start_date,
+            func.date(Task.completed_at) <= end_date,
+        )
+        .order_by(Task.completed_at)
     )
     return list(result.scalars().all())
