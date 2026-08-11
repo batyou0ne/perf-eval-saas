@@ -5,6 +5,7 @@ from app.models.evaluation_summary import EvaluationSummary
 from app.models.invite import Invite
 from app.models.question import Question, QuestionType
 from app.models.response import Response
+from app.models.task import Task, TaskStatus
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -19,6 +20,8 @@ __all__ = [
     "Question",
     "QuestionType",
     "Response",
+    "Task",
+    "TaskStatus",
     "User",
     "UserRole",
 ]

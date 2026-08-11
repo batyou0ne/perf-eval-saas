@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_role
 from app.core.database import get_db
-from app.crud.user import list_active_users_by_company, list_users_by_company
+from app.crud.user import list_active_users_by_company, list_direct_reports, list_users_by_company
 from app.models.user import User, UserRole
 from app.schemas.auth import UserRead
 from app.schemas.pagination import Page
@@ -24,6 +24,15 @@ async def list_user_options(
     """Every active colleague, unpaginated — this feeds the manager picker, which needs
     the full set to stay correct (you can't pick someone who isn't on the current page)."""
     return await list_active_users_by_company(db, current_user.company_id)
+
+
+@router.get("/users/reports", response_model=list[UserOption])
+async def list_my_reports(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.MANAGER)),
+) -> list[UserOption]:
+    """The caller's own direct reports — feeds the task-assignment picker."""
+    return await list_direct_reports(db, current_user.id)
 
 
 @router.get("/users", response_model=Page[UserRead])
