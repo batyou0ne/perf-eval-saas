@@ -300,3 +300,22 @@ async def test_user_options_are_scoped_to_the_callers_company(
 async def test_employee_cannot_read_user_options(client, as_user, employee):
     as_user(employee)
     assert (await client.get(f"{USERS}/options")).status_code == 403
+
+
+async def test_manager_reports_lists_only_own_direct_reports(client, as_user, db_session, company, manager, employee):
+    other_manager_report = await make_user(
+        db_session, role=UserRole.EMPLOYEE, company_id=company.id, manager_id=None
+    )
+    as_user(manager)
+
+    response = await client.get(f"{USERS}/reports")
+
+    assert response.status_code == 200
+    ids = {r["id"] for r in response.json()}
+    assert str(employee.id) in ids
+    assert str(other_manager_report.id) not in ids
+
+
+async def test_employee_cannot_read_manager_reports(client, as_user, employee):
+    as_user(employee)
+    assert (await client.get(f"{USERS}/reports")).status_code == 403

@@ -4,7 +4,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud.evaluation import list_open_manager_evaluations_for_evaluator
+from app.crud.task import list_open_tasks_for_assignee
 from app.crud.user import get_user_by_id, list_direct_reports
+from app.models.task import TaskStatus
 from app.models.user import User, UserRole
 
 
@@ -82,6 +84,20 @@ async def _hand_over_management(db: AsyncSession, target: User) -> None:
         evaluation.evaluator_id = skip_level.id
 
 
+async def _return_tasks_to_pool(db: AsyncSession, target: User) -> None:
+    """Drop a departing user's in-flight tasks back into the shared pool.
+
+    Unlike a manager review, a task isn't owed by anyone specific — whoever's free
+    can pick it up next, so there's no handover target to find and no error case.
+    Done/cancelled tasks are left alone: they're history, and Phase 2 reads them for
+    evaluation evidence.
+    """
+    for task in await list_open_tasks_for_assignee(db, target.id):
+        task.assignee_id = None
+        task.status = TaskStatus.TODO
+        task.claimed_at = None
+
+
 async def deactivate_user(db: AsyncSession, actor: User, target_user_id: uuid.UUID) -> User:
     target = await _get_target_in_company(db, actor, target_user_id)
 
@@ -94,6 +110,7 @@ async def deactivate_user(db: AsyncSession, actor: User, target_user_id: uuid.UU
     # Reassigns in the same transaction as the deactivation, so we never leave reports
     # or reviews pointing at a user who can't log in.
     await _hand_over_management(db, target)
+    await _return_tasks_to_pool(db, target)
 
     target.is_active = False
     await db.commit()

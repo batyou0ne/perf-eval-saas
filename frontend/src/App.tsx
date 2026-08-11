@@ -14,6 +14,8 @@ import { TeamPage } from '@/pages/TeamPage'
 import { InvitesPage } from '@/pages/InvitesPage'
 import { MyEvaluationsPage } from '@/pages/MyEvaluationsPage'
 import { EvaluationDetailPage } from '@/pages/EvaluationDetailPage'
+import { TasksPage } from '@/pages/TasksPage'
+import { TaskDetailPage } from '@/pages/TaskDetailPage'
 
 function App() {
   return (
@@ -29,6 +31,8 @@ function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/evaluations" element={<MyEvaluationsPage />} />
               <Route path="/evaluations/:id" element={<EvaluationDetailPage />} />
+              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/tasks/:id" element={<TaskDetailPage />} />
               <Route path="/cycles" element={<CyclesPage />} />
               <Route path="/cycles/new" element={<NewCyclePage />} />
               <Route path="/cycles/:id" element={<CycleDetailPage />} />
