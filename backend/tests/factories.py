@@ -6,9 +6,10 @@ setup. Test modules import from here instead.
 """
 
 import uuid
+from datetime import datetime
 
 from app.core.security import hash_password
-from app.models import User, UserRole
+from app.models import Task, TaskStatus, User, UserRole
 
 TEST_PASSWORD = "testpassword123"
 
@@ -35,6 +36,31 @@ async def make_user(
     session.add(user)
     await session.flush()
     return user
+
+
+async def make_task(
+    session,
+    *,
+    company_id,
+    assignee_id,
+    created_by_id,
+    title: str = "A completed task",
+    status: TaskStatus = TaskStatus.DONE,
+    completed_at: datetime | None = None,
+) -> Task:
+    """A task with a directly-set completed_at, so tests can place it inside or
+    outside a cycle's date window without depending on the real clock."""
+    task = Task(
+        company_id=company_id,
+        title=title,
+        created_by_id=created_by_id,
+        assignee_id=assignee_id,
+        status=status,
+        completed_at=completed_at,
+    )
+    session.add(task)
+    await session.flush()
+    return task
 
 
 async def find_evaluation(client, *, cycle_id, subject_id, eval_type: str) -> dict | None:

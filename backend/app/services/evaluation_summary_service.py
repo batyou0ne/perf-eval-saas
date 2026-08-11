@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.evaluation_summary import generate_evaluation_summary
 from app.crud.evaluation import get_evaluations_for_subject_in_cycle
 from app.crud.evaluation_summary import get_summary
+from app.crud.task import list_completed_tasks_for_subject_in_range
 from app.models.evaluation import Evaluation, EvaluationStatus, EvaluationType
 from app.models.evaluation_summary import EvaluationSummary
 from app.models.user import User
@@ -74,6 +75,10 @@ async def get_or_generate_summary(
     if manager_eval.status != EvaluationStatus.SUBMITTED:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "The manager evaluation must be submitted first")
 
+    completed_tasks = await list_completed_tasks_for_subject_in_range(
+        db, self_eval.cycle.company_id, subject_id, self_eval.cycle.start_date, self_eval.cycle.end_date
+    )
+
     try:
         content = await generate_evaluation_summary(
             subject_name=self_eval.subject.full_name,
@@ -82,6 +87,7 @@ async def get_or_generate_summary(
             self_qa=_qa_pairs(self_eval),
             manager_name=manager_eval.evaluator.full_name,
             manager_qa=_qa_pairs(manager_eval),
+            completed_task_titles=[t.title for t in completed_tasks],
         )
     except ClientError as exc:
         if exc.code == 429:

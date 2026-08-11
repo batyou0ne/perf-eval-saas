@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.models.evaluation import EvaluationStatus, EvaluationType
 from app.models.question import QuestionType
 from app.schemas.evaluation_cycle import QuestionRead
+from app.schemas.task import TaskEvidence
 
 
 class EvaluationSummary(BaseModel):
@@ -48,6 +49,9 @@ class EvaluationDetail(BaseModel):
     submitted_at: datetime | None
     questions: list[QuestionRead]
     responses: list[ResponseRead]
+    # Evidence, not input: the subject's completed tasks within the cycle's date range,
+    # shown alongside the form so answers don't have to be written from memory alone.
+    completed_tasks: list[TaskEvidence]
 
 
 class EvaluationSubmit(BaseModel):
