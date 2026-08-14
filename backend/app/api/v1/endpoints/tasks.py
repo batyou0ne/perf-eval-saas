@@ -27,12 +27,15 @@ async def create_task(
 async def list_tasks(
     scope: str = Query(default="all", pattern="^(all|pool|mine)$"),
     task_status: TaskStatus | None = Query(default=None, alias="status"),
+    open_only: bool = Query(default=False, description="Only todo/in_progress tasks"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Page[TaskRead]:
-    return await task_service.list_company_tasks(db, current_user, scope, task_status, page, page_size)
+    return await task_service.list_company_tasks(
+        db, current_user, scope, task_status, page, page_size, open_only=open_only
+    )
 
 
 @router.get("/tasks/{task_id}", response_model=TaskRead)

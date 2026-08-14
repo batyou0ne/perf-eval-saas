@@ -474,3 +474,48 @@ async def test_submitting_returns_completed_tasks_in_the_response(
     )
 
     assert {t["title"] for t in response.json()["completed_tasks"]} == {"Wrote the onboarding doc"}
+
+
+# --- dashboard-facing filters -------------------------------------------------
+
+
+async def test_evaluation_summary_includes_the_cycles_end_date(client, as_user, manager, active_cycle):
+    as_user(manager)
+
+    listing = (await client.get(f"{EVALUATIONS}/me")).json()["items"]
+
+    assert all(e["cycle_end_date"] == str(active_cycle.end_date) for e in listing)
+
+
+async def test_pending_filter_returns_only_unsubmitted_work_owed_as_evaluator(
+    client, as_user, manager, employee, active_cycle
+):
+    as_user(manager)
+
+    pending = (await client.get(f"{EVALUATIONS}/me", params={"pending": "true"})).json()
+
+    # The manager owes their own self-eval and the employee's manager-eval — both unsubmitted.
+    assert pending["total"] == 2
+    kinds = {(e["type"], e["subject_id"]) for e in pending["items"]}
+    assert ("self", str(manager.id)) in kinds
+    assert ("manager", str(employee.id)) in kinds
+
+
+async def test_pending_filter_excludes_submitted_work(client, as_user, manager, employee_self_eval, employee):
+    as_user(employee)
+    await submit_evaluation(client, employee_self_eval["id"])
+
+    pending = (await client.get(f"{EVALUATIONS}/me", params={"pending": "true"})).json()
+
+    assert pending["total"] == 0
+
+
+async def test_pending_filter_excludes_evaluations_where_user_is_only_the_subject(
+    client, as_user, employee, manager_eval_of_employee
+):
+    """The employee is the subject of their manager-eval, not the evaluator — it's not their pending work."""
+    as_user(employee)
+
+    pending = (await client.get(f"{EVALUATIONS}/me", params={"pending": "true"})).json()
+
+    assert all(e["id"] != manager_eval_of_employee["id"] for e in pending["items"])

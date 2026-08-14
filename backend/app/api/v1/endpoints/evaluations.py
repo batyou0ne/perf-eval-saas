@@ -17,10 +17,11 @@ router = APIRouter()
 async def list_my_evaluations(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    pending: bool = Query(default=False, description="Only evaluations this user still owes as evaluator"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Page[EvaluationSummary]:
-    return await evaluation_service.list_my_evaluations(db, current_user, page, page_size)
+    return await evaluation_service.list_my_evaluations(db, current_user, page, page_size, pending_only=pending)
 
 
 @router.get("/evaluations/{evaluation_id}", response_model=EvaluationDetail)
