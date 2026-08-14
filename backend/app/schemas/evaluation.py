@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -13,6 +13,7 @@ class EvaluationSummary(BaseModel):
     id: uuid.UUID
     cycle_id: uuid.UUID
     cycle_name: str
+    cycle_end_date: date
     subject_id: uuid.UUID
     subject_name: str
     evaluator_id: uuid.UUID

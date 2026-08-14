@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetchJson, ApiError } from '@/lib/api';
+import type { Page } from '@/lib/pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +16,7 @@ interface Company {
 export function DashboardPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'super_admin';
+  const canManageCycles = user?.role === 'company_admin' || user?.role === 'hr';
   const [companies, setCompanies] = useState<Company[]>([]);
 
   const refetchCompanies = useCallback(() => {
@@ -36,11 +39,183 @@ export function DashboardPage() {
         <p className="text-sm text-muted-foreground">{user?.role.replace('_', ' ')}</p>
       </div>
 
+      {!isSuperAdmin && <PendingWorkCard />}
+      {canManageCycles && <ActiveCycleCard />}
+
       {isSuperAdmin && <CreateCompanyForm onCreated={refetchCompanies} />}
       {(user?.role === 'company_admin' || isSuperAdmin) && (
         <InviteTeammateForm isSuperAdmin={isSuperAdmin} companies={companies} />
       )}
     </div>
+  );
+}
+
+interface EvaluationSummary {
+  id: string;
+  cycle_name: string;
+  cycle_end_date: string;
+  subject_id: string;
+  subject_name: string;
+  type: 'self' | 'manager';
+}
+
+interface TaskSummary {
+  id: string;
+  title: string;
+  due_date: string | null;
+}
+
+interface PendingItem {
+  key: string;
+  kind: 'Evaluation' | 'Task';
+  label: string;
+  context: string;
+  deadline: string | null;
+  href: string;
+}
+
+function PendingWorkCard() {
+  const [items, setItems] = useState<PendingItem[] | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      apiFetchJson<Page<EvaluationSummary>>('/api/v1/evaluations/me?pending=true&page_size=50'),
+      apiFetchJson<Page<TaskSummary>>('/api/v1/tasks?scope=mine&open_only=true&page_size=50'),
+    ]).then(([evaluations, tasks]) => {
+      const evaluationItems: PendingItem[] = evaluations.items.map((e) => ({
+        key: `eval-${e.id}`,
+        kind: 'Evaluation',
+        label: e.type === 'self' ? 'Self-evaluation' : `Evaluate ${e.subject_name}`,
+        context: e.cycle_name,
+        deadline: e.cycle_end_date,
+        href: `/evaluations/${e.id}`,
+      }));
+      const taskItems: PendingItem[] = tasks.items.map((t) => ({
+        key: `task-${t.id}`,
+        kind: 'Task',
+        label: t.title,
+        context: 'Task',
+        deadline: t.due_date,
+        href: `/tasks/${t.id}`,
+      }));
+      setItems(
+        [...evaluationItems, ...taskItems].sort((a, b) => {
+          if (!a.deadline) return 1;
+          if (!b.deadline) return -1;
+          return a.deadline.localeCompare(b.deadline);
+        }),
+      );
+    });
+  }, []);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Your pending work</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {items === null ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">You're all caught up — nothing waiting on you right now.</p>
+        ) : (
+          items.map((item) => (
+            <Link
+              key={item.key}
+              to={item.href}
+              className="flex items-center justify-between gap-4 border-b pb-3 last:border-b-0 last:pb-0"
+            >
+              <div>
+                <p className="text-sm text-foreground">{item.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {item.kind} · {item.context}
+                </p>
+              </div>
+              {item.deadline && <span className="text-xs text-muted-foreground">Due {item.deadline}</span>}
+            </Link>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface Cycle {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  status: 'draft' | 'active' | 'closed';
+}
+
+interface CycleProgress {
+  self_submitted: number;
+  self_total: number;
+  manager_submitted: number;
+  manager_total: number;
+}
+
+function ActiveCycleCard() {
+  const [cycle, setCycle] = useState<Cycle | null | undefined>(undefined);
+  const [progress, setProgress] = useState<CycleProgress | null>(null);
+
+  useEffect(() => {
+    apiFetchJson<Page<Cycle>>('/api/v1/cycles?page_size=100').then((page) => {
+      setCycle(page.items.find((c) => c.status === 'active') ?? null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!cycle) return;
+    apiFetchJson<CycleProgress>(`/api/v1/cycles/${cycle.id}/progress`).then(setProgress);
+  }, [cycle]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Active review cycle</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {cycle === undefined ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : cycle === null ? (
+          <p className="text-sm text-muted-foreground">
+            No active cycle right now.{' '}
+            <Link to="/cycles/new" className="underline">
+              Start a new one
+            </Link>
+            .
+          </p>
+        ) : (
+          <>
+            <Link to={`/cycles/${cycle.id}`} className="text-sm font-medium text-foreground">
+              {cycle.name}
+            </Link>
+            <p className="text-xs text-muted-foreground">
+              {cycle.start_date} – {cycle.end_date}
+            </p>
+            {progress && (
+              <div className="flex flex-wrap gap-x-6 gap-y-1">
+                <p className="text-sm text-foreground">
+                  Self-evaluations:{' '}
+                  <span className="font-medium">
+                    {progress.self_submitted}/{progress.self_total}
+                  </span>{' '}
+                  submitted
+                </p>
+                <p className="text-sm text-foreground">
+                  Manager evaluations:{' '}
+                  <span className="font-medium">
+                    {progress.manager_submitted}/{progress.manager_total}
+                  </span>{' '}
+                  submitted
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

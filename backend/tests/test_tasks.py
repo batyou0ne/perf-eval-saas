@@ -201,6 +201,20 @@ async def test_task_list_uses_the_pagination_envelope(client, as_user, employee)
     assert body["total"] >= 1
 
 
+async def test_open_only_excludes_done_and_cancelled_tasks(client, as_user, employee):
+    as_user(employee)
+    open_task = (await _create(client, title="Still open")).json()["id"]
+    await client.post(f"{TASKS}/{open_task}/claim")
+    done_task = (await _create(client, title="Finished")).json()["id"]
+    await client.post(f"{TASKS}/{done_task}/claim")
+    await client.patch(f"{TASKS}/{done_task}", json={"status": "done"})
+
+    response = await client.get(TASKS, params={"scope": "mine", "open_only": "true"})
+
+    titles = {t["title"] for t in response.json()["items"]}
+    assert titles == {"Still open"}
+
+
 # --- deactivation integration -------------------------------------------------
 
 
