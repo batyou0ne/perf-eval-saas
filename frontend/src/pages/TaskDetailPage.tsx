@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useOutletContext, useParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetchJson, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { TasksOutletContext } from '@/pages/TasksPage';
 
 interface TaskDetail {
   id: string;
@@ -29,6 +30,9 @@ const STATUS_LABEL: Record<TaskDetail['status'], string> = {
 export function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  // null outside the tasks master-detail layout (e.g. this component's own tests) — the
+  // list-refresh callback is an enhancement for that layout, not something to depend on.
+  const outletContext = useOutletContext<TasksOutletContext>();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -48,6 +52,7 @@ export function TaskDetailPage() {
     setWorking(true);
     try {
       setTask(await action());
+      outletContext?.onTaskChanged();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Could not update task');
     } finally {
