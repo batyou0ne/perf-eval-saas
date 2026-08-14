@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiFetchJson } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -44,6 +44,20 @@ function page(items: (typeof poolTask)[]) {
   return { items, total: items.length, page: 1, page_size: 20 };
 }
 
+/** Mirrors the nested route in App.tsx, with a stand-in for the detail pane — TaskDetailPage
+ * has its own dedicated test file, so this only needs to prove the Outlet slot renders. */
+function renderPage(initialEntry = '/tasks') {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>
+        <Route path="/tasks" element={<TasksPage />}>
+          <Route path=":id" element={<div>Detail pane placeholder</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe('TasksPage', () => {
   beforeEach(() => {
     mockApiFetchJson.mockReset();
@@ -56,11 +70,7 @@ describe('TasksPage', () => {
       return Promise.resolve([]);
     });
 
-    render(
-      <MemoryRouter>
-        <TasksPage />
-      </MemoryRouter>,
-    );
+    renderPage();
 
     expect(await screen.findByText('Fix the API route mismatch')).toBeInTheDocument();
     expect(screen.getByText(/In the pool/)).toBeInTheDocument();
@@ -77,16 +87,44 @@ describe('TasksPage', () => {
       return Promise.resolve([]);
     });
 
-    render(
-      <MemoryRouter>
-        <TasksPage />
-      </MemoryRouter>,
-    );
+    renderPage();
     await screen.findByText('Fix the API route mismatch');
 
     await user.click(screen.getByRole('button', { name: 'Mine' }));
 
     expect(await screen.findByText('Write the onboarding doc')).toBeInTheDocument();
     expect(calls.some((c) => c.includes('scope=mine'))).toBe(true);
+  });
+
+  it('hides the create-task form until "New task" is clicked', async () => {
+    const user = userEvent.setup();
+    mockApiFetchJson.mockImplementation((path: string) =>
+      path.startsWith('/api/v1/tasks') ? Promise.resolve(page([])) : Promise.resolve([]),
+    );
+
+    renderPage();
+    await screen.findByText('No tasks here.');
+
+    expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'New task' }));
+
+    expect(screen.getByLabelText('Title')).toBeInTheDocument();
+  });
+
+  it('shows a placeholder until a task is selected, then renders the nested route in its place', async () => {
+    const user = userEvent.setup();
+    mockApiFetchJson.mockImplementation((path: string) =>
+      path.startsWith('/api/v1/tasks') ? Promise.resolve(page([poolTask])) : Promise.resolve([]),
+    );
+
+    renderPage();
+    await screen.findByText('Fix the API route mismatch');
+    expect(screen.getByText(/select a task/i)).toBeInTheDocument();
+
+    await user.click(screen.getByText('Fix the API route mismatch'));
+
+    expect(await screen.findByText('Detail pane placeholder')).toBeInTheDocument();
+    expect(screen.queryByText(/select a task/i)).not.toBeInTheDocument();
   });
 });
