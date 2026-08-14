@@ -111,7 +111,13 @@ async def create_task(db: AsyncSession, actor: User, data: TaskCreate) -> TaskRe
 
 
 async def list_company_tasks(
-    db: AsyncSession, actor: User, scope: str, status_filter: TaskStatus | None, page: int, page_size: int
+    db: AsyncSession,
+    actor: User,
+    scope: str,
+    status_filter: TaskStatus | None,
+    page: int,
+    page_size: int,
+    open_only: bool = False,
 ) -> Page[TaskRead]:
     _require_company_scope(actor)
 
@@ -121,6 +127,7 @@ async def list_company_tasks(
         scope=scope,
         user_id=actor.id,
         status=status_filter,
+        open_only=open_only,
         offset=(page - 1) * page_size,
         limit=page_size,
     )

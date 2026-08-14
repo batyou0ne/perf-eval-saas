@@ -22,6 +22,7 @@ async def list_tasks(
     scope: str,
     user_id: uuid.UUID,
     status: TaskStatus | None,
+    open_only: bool = False,
     offset: int,
     limit: int,
 ) -> tuple[list[Task], int]:
@@ -32,6 +33,9 @@ async def list_tasks(
         query = query.where(Task.assignee_id == user_id)
     if status is not None:
         query = query.where(Task.status == status)
+    # A dashboard widget's shape: "still in flight", regardless of the single-status filter above.
+    if open_only:
+        query = query.where(Task.status.in_((TaskStatus.TODO, TaskStatus.IN_PROGRESS)))
 
     total = await db.scalar(select(func.count()).select_from(query.subquery()))
 

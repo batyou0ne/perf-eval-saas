@@ -77,13 +77,18 @@ def _to_detail(evaluation: Evaluation, completed_tasks: list[Task]) -> Evaluatio
     )
 
 
-async def list_my_evaluations(db: AsyncSession, user: User, page: int, page_size: int) -> Page[EvaluationSummary]:
-    evaluations, total = await list_evaluations_for_user(db, user.id, offset=(page - 1) * page_size, limit=page_size)
+async def list_my_evaluations(
+    db: AsyncSession, user: User, page: int, page_size: int, pending_only: bool = False
+) -> Page[EvaluationSummary]:
+    evaluations, total = await list_evaluations_for_user(
+        db, user.id, offset=(page - 1) * page_size, limit=page_size, pending_only=pending_only
+    )
     items = [
         EvaluationSummary(
             id=e.id,
             cycle_id=e.cycle_id,
             cycle_name=e.cycle.name,
+            cycle_end_date=e.cycle.end_date,
             subject_id=e.subject_id,
             subject_name=e.subject.full_name,
             evaluator_id=e.evaluator_id,
