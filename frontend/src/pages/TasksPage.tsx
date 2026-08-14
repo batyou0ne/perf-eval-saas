@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Outlet, useParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetchJson, ApiError } from '@/lib/api';
 import { PAGE_SIZE, totalPages, type Page } from '@/lib/pagination';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Pager } from '@/components/Pager';
 
 interface TaskSummary {
@@ -38,12 +39,22 @@ const STATUS_LABEL: Record<TaskSummary['status'], string> = {
   cancelled: 'Cancelled',
 };
 
+/** Lets the nested detail pane (rendered via <Outlet>) tell the list to refetch after
+ * a claim/release/status change, so the two panes never show contradictory state. */
+export interface TasksOutletContext {
+  onTaskChanged: () => void;
+}
+
 export function TasksPage() {
   const { user } = useAuth();
+  // Also matches when the nested detail route is active — React Router merges a nested
+  // route's params into every ancestor's useParams() for the same location.
+  const { id: selectedId } = useParams<{ id?: string }>();
   const [scope, setScope] = useState<Scope>('all');
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<TaskSummary> | null>(null);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const refetch = useCallback(() => {
     setData(null);
@@ -77,51 +88,76 @@ export function TasksPage() {
     setPage(1);
   }
 
+  function handleCreated() {
+    setShowCreateForm(false);
+    refetch();
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-foreground">Tasks</h1>
-
-      <CreateTaskForm assignees={assignees} onCreated={refetch} />
-
-      <div className="flex gap-2">
-        {TABS.map((t) => (
-          <Button
-            key={t.scope}
-            type="button"
-            size="sm"
-            variant={scope === t.scope ? 'default' : 'outline'}
-            onClick={() => handleScopeChange(t.scope)}
-          >
-            {t.label}
+    <div className="flex gap-6">
+      <div className="flex w-80 shrink-0 flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-foreground">Tasks</h1>
+          <Button type="button" size="sm" onClick={() => setShowCreateForm((v) => !v)}>
+            {showCreateForm ? 'Cancel' : 'New task'}
           </Button>
-        ))}
-      </div>
+        </div>
 
-      {data === null ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {data.items.length === 0 && <p className="text-sm text-muted-foreground">No tasks here.</p>}
-          {data.items.map((t) => (
-            <Link key={t.id} to={`/tasks/${t.id}`}>
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t.title}</CardTitle>
-                  <CardAction>
-                    <span className="text-sm text-muted-foreground">{STATUS_LABEL[t.status]}</span>
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  {t.assignee_name ? `Assigned to ${t.assignee_name}` : 'In the pool'}
-                  {t.due_date && ` · Due ${t.due_date}`}
-                </CardContent>
-              </Card>
-            </Link>
+        {showCreateForm && <CreateTaskForm assignees={assignees} onCreated={handleCreated} />}
+
+        <div className="flex gap-2">
+          {TABS.map((t) => (
+            <Button
+              key={t.scope}
+              type="button"
+              size="sm"
+              variant={scope === t.scope ? 'default' : 'outline'}
+              onClick={() => handleScopeChange(t.scope)}
+            >
+              {t.label}
+            </Button>
           ))}
         </div>
-      )}
 
-      {data && <Pager page={page} totalPages={totalPages(data)} onPageChange={setPage} />}
+        {data === null ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <div className="flex flex-col overflow-hidden rounded-xl ring-1 ring-foreground/10">
+            {data.items.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">No tasks here.</p>}
+            {data.items.map((t) => (
+              <Link
+                key={t.id}
+                to={`/tasks/${t.id}`}
+                className={cn(
+                  'flex flex-col gap-1 border-b px-4 py-3 text-sm last:border-b-0 hover:bg-muted/50',
+                  t.id === selectedId && 'bg-muted',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium text-foreground">{t.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{STATUS_LABEL[t.status]}</span>
+                </div>
+                <span className="truncate text-xs text-muted-foreground">
+                  {t.assignee_name ? `Assigned to ${t.assignee_name}` : 'In the pool'}
+                  {t.due_date && ` · Due ${t.due_date}`}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {data && <Pager page={page} totalPages={totalPages(data)} onPageChange={setPage} />}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        {selectedId ? (
+          <Outlet context={{ onTaskChanged: refetch } satisfies TasksOutletContext} />
+        ) : (
+          <div className="flex h-64 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+            Select a task to see its details.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

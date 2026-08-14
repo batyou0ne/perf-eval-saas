@@ -31,8 +31,9 @@ function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/evaluations" element={<MyEvaluationsPage />} />
               <Route path="/evaluations/:id" element={<EvaluationDetailPage />} />
-              <Route path="/tasks" element={<TasksPage />} />
-              <Route path="/tasks/:id" element={<TaskDetailPage />} />
+              <Route path="/tasks" element={<TasksPage />}>
+                <Route path=":id" element={<TaskDetailPage />} />
+              </Route>
               <Route path="/cycles" element={<CyclesPage />} />
               <Route path="/cycles/new" element={<NewCyclePage />} />
               <Route path="/cycles/:id" element={<CycleDetailPage />} />
