@@ -7,8 +7,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Pager } from '@/components/Pager';
+import { StatusTick } from '@/components/StatusTick';
 
 interface TaskSummary {
   id: string;
@@ -31,13 +32,6 @@ const TABS: { scope: Scope; label: string }[] = [
   { scope: 'pool', label: 'Pool' },
   { scope: 'mine', label: 'Mine' },
 ];
-
-const STATUS_LABEL: Record<TaskSummary['status'], string> = {
-  todo: 'To do',
-  in_progress: 'In progress',
-  done: 'Done',
-  cancelled: 'Cancelled',
-};
 
 /** Lets the nested detail pane (rendered via <Outlet>) tell the list to refetch after
  * a claim/release/status change, so the two panes never show contradictory state. */
@@ -98,49 +92,53 @@ export function TasksPage() {
       <div className="flex w-80 shrink-0 flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold text-foreground">Tasks</h1>
-          <Button type="button" size="sm" onClick={() => setShowCreateForm((v) => !v)}>
+          <Button type="button" size="sm" variant="outline" onClick={() => setShowCreateForm((v) => !v)}>
             {showCreateForm ? 'Cancel' : 'New task'}
           </Button>
         </div>
 
         {showCreateForm && <CreateTaskForm assignees={assignees} onCreated={handleCreated} />}
 
-        <div className="flex gap-2">
+        <div className="flex gap-5 border-b">
           {TABS.map((t) => (
-            <Button
+            <button
               key={t.scope}
               type="button"
-              size="sm"
-              variant={scope === t.scope ? 'default' : 'outline'}
               onClick={() => handleScopeChange(t.scope)}
+              className={cn(
+                '-mb-px border-b-2 pb-2 text-xs font-semibold transition-colors',
+                scope === t.scope
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
             >
               {t.label}
-            </Button>
+            </button>
           ))}
         </div>
 
         {data === null ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
-          <div className="flex flex-col overflow-hidden rounded-xl ring-1 ring-foreground/10">
+          <div className="flex flex-col overflow-hidden rounded-lg bg-card ring-1 ring-foreground/10">
             {data.items.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">No tasks here.</p>}
             {data.items.map((t) => (
               <Link
                 key={t.id}
                 to={`/tasks/${t.id}`}
                 className={cn(
-                  'flex flex-col gap-1 border-b px-4 py-3 text-sm last:border-b-0 hover:bg-muted/50',
-                  t.id === selectedId && 'bg-muted',
+                  'flex items-start gap-2.5 border-b px-3 py-2.5 text-sm last:border-b-0 hover:bg-muted',
+                  t.id === selectedId && 'bg-primary/8',
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium text-foreground">{t.title}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{STATUS_LABEL[t.status]}</span>
+                <StatusTick status={t.status} className="mt-0.5" />
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate text-xs font-semibold text-foreground">{t.title}</span>
+                  <span className="truncate text-[11px] text-muted-foreground">
+                    {t.assignee_name ? `Assigned to ${t.assignee_name}` : 'In the pool'}
+                    {t.due_date && <span className="font-mono"> · due {t.due_date}</span>}
+                  </span>
                 </div>
-                <span className="truncate text-xs text-muted-foreground">
-                  {t.assignee_name ? `Assigned to ${t.assignee_name}` : 'In the pool'}
-                  {t.due_date && ` · Due ${t.due_date}`}
-                </span>
               </Link>
             ))}
           </div>
@@ -153,7 +151,7 @@ export function TasksPage() {
         {selectedId ? (
           <Outlet context={{ onTaskChanged: refetch } satisfies TasksOutletContext} />
         ) : (
-          <div className="flex h-64 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+          <div className="flex h-64 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
             Select a task to see its details.
           </div>
         )}
@@ -200,12 +198,9 @@ function CreateTaskForm({ assignees, onCreated }: { assignees: Assignee[]; onCre
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>New task</CardTitle>
-      </CardHeader>
+    <Card size="sm">
       <CardContent>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
             <Label htmlFor="task-title">Title</Label>
             <Input id="task-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -246,7 +241,7 @@ function CreateTaskForm({ assignees, onCreated }: { assignees: Assignee[]; onCre
             </select>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" size="sm" className="self-start" disabled={submitting}>
             {submitting ? 'Creating…' : 'Create task'}
           </Button>
         </form>

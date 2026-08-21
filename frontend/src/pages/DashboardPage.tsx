@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatusTick, type TickStatus } from '@/components/StatusTick';
+import { cn } from '@/lib/utils';
 
 interface Company {
   id: string;
@@ -36,16 +38,31 @@ export function DashboardPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Welcome, {user?.full_name}</h1>
-        <p className="text-sm text-muted-foreground">{user?.role.replace('_', ' ')}</p>
+        <p className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
+          {user?.role.replace('_', ' ')}
+        </p>
       </div>
 
-      {!isSuperAdmin && <PendingWorkCard />}
-      {canManageCycles && <ActiveCycleCard />}
-
-      {isSuperAdmin && <CreateCompanyForm onCreated={refetchCompanies} />}
-      {(user?.role === 'company_admin' || isSuperAdmin) && (
-        <InviteTeammateForm isSuperAdmin={isSuperAdmin} companies={companies} />
+      {/* Pending work is why someone opens the app, so it takes the wide column and
+          the standing figures sit beside it rather than below the fold. */}
+      {!isSuperAdmin && (
+        <div className="grid items-start gap-5 lg:grid-cols-[1.7fr_1fr]">
+          <PendingWorkCard />
+          <div className="flex flex-col gap-5">
+            {canManageCycles && <ActiveCycleCard />}
+            <CompletedTasksCard />
+          </div>
+        </div>
       )}
+
+      {/* Admin forms stay in a reading-width column — a form stretched to the grid's
+          full width is harder to fill in, not easier. */}
+      <div className="flex max-w-2xl flex-col gap-6">
+        {isSuperAdmin && <CreateCompanyForm onCreated={refetchCompanies} />}
+        {(user?.role === 'company_admin' || isSuperAdmin) && (
+          <InviteTeammateForm isSuperAdmin={isSuperAdmin} companies={companies} />
+        )}
+      </div>
     </div>
   );
 }
@@ -62,6 +79,7 @@ interface EvaluationSummary {
 interface TaskSummary {
   id: string;
   title: string;
+  status: TickStatus;
   due_date: string | null;
 }
 
@@ -72,6 +90,7 @@ interface PendingItem {
   context: string;
   deadline: string | null;
   href: string;
+  status: TickStatus;
 }
 
 function PendingWorkCard() {
@@ -89,6 +108,9 @@ function PendingWorkCard() {
         context: e.cycle_name,
         deadline: e.cycle_end_date,
         href: `/evaluations/${e.id}`,
+        // The pending feed carries no evaluation status of its own — everything in it is,
+        // by definition, still waiting to be started.
+        status: 'not_started',
       }));
       const taskItems: PendingItem[] = tasks.items.map((t) => ({
         key: `task-${t.id}`,
@@ -97,6 +119,7 @@ function PendingWorkCard() {
         context: 'Task',
         deadline: t.due_date,
         href: `/tasks/${t.id}`,
+        status: t.status,
       }));
       setItems(
         [...evaluationItems, ...taskItems].sort((a, b) => {
@@ -123,15 +146,18 @@ function PendingWorkCard() {
             <Link
               key={item.key}
               to={item.href}
-              className="flex items-center justify-between gap-4 border-b pb-3 last:border-b-0 last:pb-0"
+              className="flex items-center gap-3 border-b pb-3 last:border-b-0 last:pb-0"
             >
-              <div>
-                <p className="text-sm text-foreground">{item.label}</p>
-                <p className="text-xs text-muted-foreground">
+              <StatusTick status={item.status} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{item.label}</p>
+                <p className="font-mono text-xs text-muted-foreground">
                   {item.kind} · {item.context}
                 </p>
               </div>
-              {item.deadline && <span className="text-xs text-muted-foreground">Due {item.deadline}</span>}
+              {item.deadline && (
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">due {item.deadline}</span>
+              )}
             </Link>
           ))
         )}
@@ -191,29 +217,71 @@ function ActiveCycleCard() {
             <Link to={`/cycles/${cycle.id}`} className="text-sm font-medium text-foreground">
               {cycle.name}
             </Link>
-            <p className="text-xs text-muted-foreground">
+            <p className="font-mono text-xs text-muted-foreground">
               {cycle.start_date} – {cycle.end_date}
             </p>
             {progress && (
-              <div className="flex flex-wrap gap-x-6 gap-y-1">
-                <p className="text-sm text-foreground">
-                  Self-evaluations:{' '}
-                  <span className="font-medium">
-                    {progress.self_submitted}/{progress.self_total}
-                  </span>{' '}
-                  submitted
-                </p>
-                <p className="text-sm text-foreground">
-                  Manager evaluations:{' '}
-                  <span className="font-medium">
-                    {progress.manager_submitted}/{progress.manager_total}
-                  </span>{' '}
-                  submitted
-                </p>
+              <div className="flex flex-col gap-3">
+                <ProgressRow
+                  label="Self-evaluations"
+                  done={progress.self_submitted}
+                  total={progress.self_total}
+                />
+                <ProgressRow
+                  label="Manager evaluations"
+                  done={progress.manager_submitted}
+                  total={progress.manager_total}
+                />
               </div>
             )}
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** A submitted count only means something next to the total it is a fraction of, so the
+ * bar and the "4 / 7" readout always travel together. */
+function ProgressRow({ label, done, total }: { label: string; done: number; total: number }) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const complete = total > 0 && done === total;
+
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+        <span className="text-foreground">{label}</span>
+        <span className="font-mono text-muted-foreground">
+          {done}/{total}
+        </span>
+      </div>
+      {/* The hairline tone, not the sunken-paper one: an empty track has to stay
+          visible on a white card, otherwise 0/7 reads as "no bar at all". */}
+      <div className="h-1.5 overflow-hidden rounded-full bg-border">
+        <div
+          className={cn('h-full rounded-full', complete ? 'bg-status-good' : 'bg-primary')}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CompletedTasksCard() {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Only the total is wanted, so ask for the smallest page the API will hand back.
+    apiFetchJson<Page<TaskSummary>>('/api/v1/tasks?scope=mine&status=done&page_size=1')
+      .then((p) => setCount(p.total))
+      .catch(() => {});
+  }, []);
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-0.5">
+        <span className="font-mono text-2xl font-bold text-foreground">{count ?? '—'}</span>
+        <span className="text-xs text-muted-foreground">Tasks you've completed</span>
       </CardContent>
     </Card>
   );
