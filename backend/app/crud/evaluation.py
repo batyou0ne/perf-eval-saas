@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,9 +34,15 @@ async def list_open_manager_evaluations_for_evaluator(
 
 
 async def list_evaluations_for_user(
-    db: AsyncSession, user_id: uuid.UUID, offset: int, limit: int
+    db: AsyncSession, user_id: uuid.UUID, offset: int, limit: int, pending_only: bool = False
 ) -> tuple[list[Evaluation], int]:
-    scope = or_(Evaluation.evaluator_id == user_id, Evaluation.subject_id == user_id)
+    # pending_only narrows to "work this person still owes as evaluator" — a dashboard
+    # widget's shape, distinct from the full self+subject listing the page normally shows.
+    scope = (
+        and_(Evaluation.evaluator_id == user_id, Evaluation.status != EvaluationStatus.SUBMITTED)
+        if pending_only
+        else or_(Evaluation.evaluator_id == user_id, Evaluation.subject_id == user_id)
+    )
 
     total = await db.scalar(select(func.count()).select_from(Evaluation).where(scope))
 

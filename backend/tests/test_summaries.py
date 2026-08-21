@@ -5,12 +5,13 @@ an unmocked call fails loudly rather than silently costing money or flaking on a
 network hiccup.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 
 from app.ai.evaluation_summary import EvaluationSummaryContent
-from tests.factories import find_evaluation, make_user, submit_evaluation
+from tests.factories import find_evaluation, make_task, make_user, submit_evaluation
 from app.models import UserRole
 
 CYCLES = "/api/v1/cycles"
@@ -113,6 +114,24 @@ async def test_generating_after_both_are_submitted_returns_the_summary(
     assert body["strengths"] == FAKE_SUMMARY.strengths
     assert body["alignment_notes"] == FAKE_SUMMARY.alignment_notes
     mock_gemini.assert_awaited_once()
+
+
+async def test_generation_passes_the_subjects_completed_tasks_as_evidence(
+    client, as_user, db_session, company, company_admin, employee, both_submitted, mock_gemini
+):
+    await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=employee.id,
+        created_by_id=employee.id,
+        title="Migrated the auth service",
+        completed_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+    )
+    as_user(company_admin)
+
+    await client.post(summary_url(both_submitted.id, employee.id))
+
+    assert "Migrated the auth service" in mock_gemini.call_args.kwargs["completed_task_titles"]
 
 
 async def test_the_summary_is_generated_once_and_then_reused(

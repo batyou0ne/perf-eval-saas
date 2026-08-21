@@ -1,9 +1,11 @@
 """Evaluation submission rules and the who-can-see-what matrix."""
 
+from datetime import datetime, timezone
+
 import pytest
 
-from tests.factories import build_responses, find_evaluation, make_user, submit_evaluation
-from app.models import UserRole
+from tests.factories import build_responses, find_evaluation, make_task, make_user, submit_evaluation
+from app.models import TaskStatus, UserRole
 
 CYCLES = "/api/v1/cycles"
 EVALUATIONS = "/api/v1/evaluations"
@@ -377,3 +379,143 @@ async def test_cannot_submit_into_a_closed_cycle(
     response = await client.post(f"{EVALUATIONS}/{employee_self_eval['id']}/submit", json=body)
 
     assert response.status_code == 400
+
+
+# --- completed tasks as evidence ---------------------------------------------
+
+
+async def test_evaluation_detail_includes_only_the_subjects_completed_tasks_in_the_cycle_window(
+    client, as_user, db_session, company, employee, manager, active_cycle, employee_self_eval
+):
+    in_window = await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=employee.id,
+        created_by_id=employee.id,
+        title="Shipped the onboarding flow",
+        completed_at=datetime(2026, 2, 10, tzinfo=timezone.utc),
+    )
+    await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=employee.id,
+        created_by_id=employee.id,
+        title="Finished before the cycle started",
+        completed_at=datetime(2025, 12, 20, tzinfo=timezone.utc),
+    )
+    await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=employee.id,
+        created_by_id=employee.id,
+        title="Finished after the cycle ended",
+        completed_at=datetime(2026, 4, 5, tzinfo=timezone.utc),
+    )
+    await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=manager.id,
+        created_by_id=manager.id,
+        title="Someone else's completed task",
+        completed_at=datetime(2026, 2, 10, tzinfo=timezone.utc),
+    )
+    await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=employee.id,
+        created_by_id=employee.id,
+        title="Still in progress",
+        status=TaskStatus.IN_PROGRESS,
+        completed_at=None,
+    )
+    as_user(employee)
+
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+
+    titles = {t["title"] for t in detail["completed_tasks"]}
+    assert titles == {"Shipped the onboarding flow"}
+    assert detail["completed_tasks"][0]["id"] == str(in_window.id)
+
+
+async def test_manager_sees_the_same_completed_tasks_when_evaluating(
+    client, as_user, db_session, company, employee, manager, active_cycle, manager_eval_of_employee
+):
+    await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=employee.id,
+        created_by_id=employee.id,
+        title="Migrated the auth service",
+        completed_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+    )
+    as_user(manager)
+
+    detail = (await client.get(f"{EVALUATIONS}/{manager_eval_of_employee['id']}")).json()
+
+    assert {t["title"] for t in detail["completed_tasks"]} == {"Migrated the auth service"}
+
+
+async def test_submitting_returns_completed_tasks_in_the_response(
+    client, as_user, db_session, company, employee, active_cycle, employee_self_eval
+):
+    await make_task(
+        db_session,
+        company_id=company.id,
+        assignee_id=employee.id,
+        created_by_id=employee.id,
+        title="Wrote the onboarding doc",
+        completed_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+    )
+    as_user(employee)
+    detail = (await client.get(f"{EVALUATIONS}/{employee_self_eval['id']}")).json()
+
+    response = await client.post(
+        f"{EVALUATIONS}/{employee_self_eval['id']}/submit", json=build_responses(detail)
+    )
+
+    assert {t["title"] for t in response.json()["completed_tasks"]} == {"Wrote the onboarding doc"}
+
+
+# --- dashboard-facing filters -------------------------------------------------
+
+
+async def test_evaluation_summary_includes_the_cycles_end_date(client, as_user, manager, active_cycle):
+    as_user(manager)
+
+    listing = (await client.get(f"{EVALUATIONS}/me")).json()["items"]
+
+    assert all(e["cycle_end_date"] == str(active_cycle.end_date) for e in listing)
+
+
+async def test_pending_filter_returns_only_unsubmitted_work_owed_as_evaluator(
+    client, as_user, manager, employee, active_cycle
+):
+    as_user(manager)
+
+    pending = (await client.get(f"{EVALUATIONS}/me", params={"pending": "true"})).json()
+
+    # The manager owes their own self-eval and the employee's manager-eval — both unsubmitted.
+    assert pending["total"] == 2
+    kinds = {(e["type"], e["subject_id"]) for e in pending["items"]}
+    assert ("self", str(manager.id)) in kinds
+    assert ("manager", str(employee.id)) in kinds
+
+
+async def test_pending_filter_excludes_submitted_work(client, as_user, manager, employee_self_eval, employee):
+    as_user(employee)
+    await submit_evaluation(client, employee_self_eval["id"])
+
+    pending = (await client.get(f"{EVALUATIONS}/me", params={"pending": "true"})).json()
+
+    assert pending["total"] == 0
+
+
+async def test_pending_filter_excludes_evaluations_where_user_is_only_the_subject(
+    client, as_user, employee, manager_eval_of_employee
+):
+    """The employee is the subject of their manager-eval, not the evaluator — it's not their pending work."""
+    as_user(employee)
+
+    pending = (await client.get(f"{EVALUATIONS}/me", params={"pending": "true"})).json()
+
+    assert all(e["id"] != manager_eval_of_employee["id"] for e in pending["items"])

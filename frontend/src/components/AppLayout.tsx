@@ -1,11 +1,16 @@
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const canManage = user?.role === 'company_admin' || user?.role === 'hr';
   const isCompanyAdmin = user?.role === 'company_admin';
+  // Tasks are a per-company concern — super_admin has no company_id and the API rejects them.
+  const canUseTasks = user?.role !== 'super_admin';
+  // The tasks master-detail layout needs more room than the app's usual single-column pages.
+  const isWidePage = location.pathname.startsWith('/tasks');
 
   return (
     <div className="min-h-svh">
@@ -17,6 +22,11 @@ export function AppLayout() {
           <Link to="/evaluations" className="text-sm text-muted-foreground hover:text-foreground">
             My Evaluations
           </Link>
+          {canUseTasks && (
+            <Link to="/tasks" className="text-sm text-muted-foreground hover:text-foreground">
+              Tasks
+            </Link>
+          )}
           {canManage && (
             <>
               <Link to="/cycles" className="text-sm text-muted-foreground hover:text-foreground">
@@ -40,7 +50,7 @@ export function AppLayout() {
           </Button>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl p-6">
+      <main className={`mx-auto p-6 ${isWidePage ? 'max-w-6xl' : 'max-w-3xl'}`}>
         <Outlet />
       </main>
     </div>
