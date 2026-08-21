@@ -40,7 +40,7 @@ const mineTask = {
   due_date: null,
 };
 
-function page(items: (typeof poolTask)[]) {
+function page<T>(items: T[]) {
   return { items, total: items.length, page: 1, page_size: 20 };
 }
 
