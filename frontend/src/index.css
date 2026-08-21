@@ -2,12 +2,16 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
+    /* The instrument face: dates, ids, ratings and counts are set in it so numbers
+       line up like a gauge readout rather than drifting with proportional widths. */
+    --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -21,6 +25,11 @@
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
     --color-chart-1: var(--chart-1);
+    /* Status colours are deliberately separate from --primary: the brand can be
+       restyled without silently changing what "done" or "cancelled" looks like. */
+    --color-status-good: var(--status-good);
+    --color-status-warn: var(--status-warn);
+    --color-status-bad: var(--status-bad);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -48,73 +57,83 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Calibration palette: tinted neutrals (paper / ink / line), one brand hue
+   (meridian blue), and three status hues that never double as brand colour. */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --background: oklch(0.973 0.003 264.5);
+    --foreground: oklch(0.208 0.015 261.6);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.208 0.015 261.6);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --popover-foreground: oklch(0.208 0.015 261.6);
+    --primary: oklch(0.388 0.081 256.5);
+    --primary-foreground: oklch(1 0 89.9);
+    --secondary: oklch(0.954 0.005 258.3);
+    --secondary-foreground: oklch(0.208 0.015 261.6);
+    --muted: oklch(0.954 0.005 258.3);
+    --muted-foreground: oklch(0.551 0.027 264.4);
+    --accent: oklch(0.388 0.081 256.5);
+    --accent-foreground: oklch(1 0 89.9);
+    --destructive: oklch(0.537 0.135 31.1);
+    --status-good: oklch(0.531 0.079 159.9);
+    --status-warn: oklch(0.621 0.111 75.3);
+    --status-bad: oklch(0.537 0.135 31.1);
+    --border: oklch(0.896 0.012 259.8);
+    --input: oklch(0.896 0.012 259.8);
+    --ring: oklch(0.388 0.081 256.5);
+    --chart-1: oklch(0.388 0.081 256.5);
+    --chart-2: oklch(0.531 0.079 159.9);
+    --chart-3: oklch(0.621 0.111 75.3);
+    --chart-4: oklch(0.537 0.135 31.1);
+    --chart-5: oklch(0.551 0.027 264.4);
+    --radius: 0.5rem;
+    --sidebar: oklch(0.954 0.005 258.3);
+    --sidebar-foreground: oklch(0.208 0.015 261.6);
+    --sidebar-primary: oklch(0.388 0.081 256.5);
+    --sidebar-primary-foreground: oklch(1 0 89.9);
+    --sidebar-accent: oklch(0.954 0.005 258.3);
+    --sidebar-accent-foreground: oklch(0.208 0.015 261.6);
+    --sidebar-border: oklch(0.896 0.012 259.8);
+    --sidebar-ring: oklch(0.388 0.081 256.5);
 }
 
+/* Tuned for contrast rather than inverted. Nothing sets .dark yet — these values
+   are here so the palette is complete the day a theme toggle lands. */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: oklch(0.190 0.014 258.4);
+    --foreground: oklch(0.934 0.006 264.5);
+    --card: oklch(0.225 0.017 259.7);
+    --card-foreground: oklch(0.934 0.006 264.5);
+    --popover: oklch(0.225 0.017 259.7);
+    --popover-foreground: oklch(0.934 0.006 264.5);
+    --primary: oklch(0.678 0.095 252.6);
+    --primary-foreground: oklch(0.190 0.014 258.4);
+    --secondary: oklch(0.254 0.019 258.4);
+    --secondary-foreground: oklch(0.934 0.006 264.5);
+    --muted: oklch(0.254 0.019 258.4);
+    --muted-foreground: oklch(0.647 0.021 261.5);
+    --accent: oklch(0.678 0.095 252.6);
+    --accent-foreground: oklch(0.190 0.014 258.4);
+    --destructive: oklch(0.684 0.120 33.1);
+    --status-good: oklch(0.659 0.090 158.2);
+    --status-warn: oklch(0.741 0.118 79.2);
+    --status-bad: oklch(0.684 0.120 33.1);
+    --border: oklch(0.311 0.022 259.4);
+    --input: oklch(0.311 0.022 259.4);
+    --ring: oklch(0.678 0.095 252.6);
+    --chart-1: oklch(0.678 0.095 252.6);
+    --chart-2: oklch(0.659 0.090 158.2);
+    --chart-3: oklch(0.741 0.118 79.2);
+    --chart-4: oklch(0.684 0.120 33.1);
+    --chart-5: oklch(0.647 0.021 261.5);
+    --sidebar: oklch(0.225 0.017 259.7);
+    --sidebar-foreground: oklch(0.934 0.006 264.5);
+    --sidebar-primary: oklch(0.678 0.095 252.6);
+    --sidebar-primary-foreground: oklch(0.190 0.014 258.4);
+    --sidebar-accent: oklch(0.254 0.019 258.4);
+    --sidebar-accent-foreground: oklch(0.934 0.006 264.5);
+    --sidebar-border: oklch(0.311 0.022 259.4);
+    --sidebar-ring: oklch(0.678 0.095 252.6);
 }
 
 @layer base {
@@ -126,5 +145,9 @@
     }
   html {
     @apply font-sans;
+    }
+  /* Digits in the instrument face are only useful if they line up column to column. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
     }
 }

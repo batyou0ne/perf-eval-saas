@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth-context';
 import { apiFetchJson, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatusTick, TICK_LABEL } from '@/components/StatusTick';
 import type { TasksOutletContext } from '@/pages/TasksPage';
 
 interface TaskDetail {
@@ -19,13 +20,6 @@ interface TaskDetail {
   claimed_at: string | null;
   completed_at: string | null;
 }
-
-const STATUS_LABEL: Record<TaskDetail['status'], string> = {
-  todo: 'To do',
-  in_progress: 'In progress',
-  done: 'Done',
-  cancelled: 'Cancelled',
-};
 
 export function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -69,6 +63,7 @@ export function TaskDetailPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
+        <p className="font-mono text-xs text-muted-foreground">Task</p>
         <h1 className="text-xl font-semibold text-foreground">{task.title}</h1>
         <p className="text-sm text-muted-foreground">Created by {task.created_by_name}</p>
       </div>
@@ -78,13 +73,16 @@ export function TaskDetailPage() {
           <CardTitle>Ownership</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {isMine ? (
-            <p className="text-sm font-medium text-primary">This task is yours.</p>
-          ) : task.assignee_name ? (
-            <p className="text-sm text-muted-foreground">Currently held by {task.assignee_name}.</p>
-          ) : (
-            <p className="text-sm text-muted-foreground">Sitting in the pool — nobody has claimed it yet.</p>
-          )}
+          <div className="flex items-center gap-2">
+            <StatusTick status={task.status} />
+            {isMine ? (
+              <p className="text-sm font-medium text-primary">This task is yours.</p>
+            ) : task.assignee_name ? (
+              <p className="text-sm text-muted-foreground">Currently held by {task.assignee_name}.</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Sitting in the pool — nobody has claimed it yet.</p>
+            )}
+          </div>
 
           {actionError && <p className="text-sm text-destructive">{actionError}</p>}
 
@@ -122,8 +120,15 @@ export function TaskDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">{task.description || 'No description.'}</p>
-          {task.due_date && <p className="text-sm text-muted-foreground">Due {task.due_date}</p>}
-          <p className="text-sm text-foreground">Status: {STATUS_LABEL[task.status]}</p>
+          {task.due_date && (
+            <p className="text-sm text-muted-foreground">
+              Due <span className="font-mono">{task.due_date}</span>
+            </p>
+          )}
+          <p className="flex items-center gap-2 text-sm text-foreground">
+            <StatusTick status={task.status} />
+            Status: {TICK_LABEL[task.status]}
+          </p>
 
           {canWork && (
             <div className="flex flex-wrap gap-2">
