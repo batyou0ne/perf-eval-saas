@@ -78,6 +78,32 @@ TypeScript on the frontend, deployed on Vercel, Render and Neon.
   two sides agreed or diverged.
 - Generated once and cached, so re-opening the page does not spend tokens again.
 
+**Tasks**
+
+- A company-wide task pool alongside direct assignment. Creating a task with no assignee drops
+  it into the pool; anyone in the company can claim it. The claim itself is race-safe — it is a
+  single conditional `UPDATE ... WHERE assignee_id IS NULL`, so two people claiming the same
+  task at once has one winner, decided by the database rather than the app.
+- Who can hand a task to whom is scoped by role: employees can only assign to themselves,
+  managers to themselves or a direct report, and HR/company admins to anyone active in the
+  company.
+- Status moves through `todo` → `in_progress` → `done`/`cancelled`. A claimed task can also be
+  released back to the pool.
+- Deactivating a user drops their open (`todo`/`in_progress`) tasks back into the unassigned
+  pool so the work doesn't disappear with the account. Finished or cancelled tasks are left
+  alone — they're history, not open work.
+- A subject's `done` tasks that fall inside a review cycle's date range are surfaced on the
+  evaluation form as evidence, and fed into the AI summary prompt alongside the questions and
+  answers, so neither the reviewer nor the model has to work from memory alone.
+
+**Dashboard**
+
+- A landing page combining what's still owed: pending evaluations (`evaluations/me?pending=true`)
+  and open tasks assigned to you (`tasks?scope=mine&open_only=true`), merged into one list
+  sorted by due date.
+- HR and company admins additionally see an active-cycle progress card — the same
+  self/manager submission counts as the cycle detail page, without navigating there first.
+
 **Production concerns**
 
 - Pagination on every list endpoint, with a deliberate exception for the two endpoints that
@@ -100,6 +126,14 @@ TypeScript on the frontend, deployed on Vercel, Render and Neon.
 | Frontend | React, TypeScript, Vite, Tailwind CSS, shadcn/ui, React Router |
 | Testing | pytest (backend), Vitest and React Testing Library (frontend) |
 | Tooling | Docker Compose, GitHub Actions, oxlint |
+
+**Design system.** Colours are defined as OKLCH tokens in `frontend/src/index.css` rather than
+hard-coded Tailwind classes, with a separate light/dark value for each so theming stays a
+single source of truth. Text uses Geist for UI copy and Geist Mono for anything that's data —
+dates, counts, IDs — so numbers line up and read as distinct from prose. Status across the app
+(task state, evaluation state) goes through one shared `StatusTick` component: a small square
+that's empty, half-filled, filled with a check, or crossed out, so state is legible by shape
+and not just colour.
 
 ---
 
@@ -143,6 +177,10 @@ This creates a company called Acme Inc. and two accounts, both with the password
 | --- | --- |
 | `admin@acmecorp.io` | Company admin |
 | `superadmin@platform.io` | Super admin |
+
+For a fuller cast of characters — a whole company with managers, reports and a demo password —
+see [`docs/USAGE_SCENARIO.md`](docs/USAGE_SCENARIO.md), which walks through the product with a
+named company and can be regenerated with a single script.
 
 **Where things run**
 
@@ -193,15 +231,23 @@ immediately. Sign back out.
 As the company admin, go to **Team** and set the employee's manager to the manager account.
 Only active users are offered, because a deactivated manager could never complete a review.
 
-### 5. Create a review cycle
+### 5. Create and claim a task
 
-Go to **Review Cycles**, then **New cycle**. Give it a name and dates, and add questions -
-a mix of rating and free-text works best for the summary later. Save it.
+Sign back in as the manager and go to **Tasks**. Create a task without an assignee - it lands
+in the shared pool - then sign in as the employee and claim it from there. Mark it **Done**
+once it's finished; a manager could instead assign a task straight to a report from the same
+form, skipping the pool.
+
+### 6. Create a review cycle
+
+Go to **Review Cycles**, then **New cycle**. Give it a name and dates that cover today (the
+task from step 5 only shows up as evidence if its completion date falls inside the cycle), and
+add questions - a mix of rating and free-text works best for the summary later. Save it.
 
 While the cycle is a draft you can still edit it. Once you activate it, the questions are
 frozen.
 
-### 6. Activate it
+### 7. Activate it
 
 Open the cycle and choose **Activate cycle**. This generates:
 
@@ -210,11 +256,12 @@ Open the cycle and choose **Activate cycle**. This generates:
 
 Managers, HR and admins are not reviewed by anyone; they only self-evaluate.
 
-### 7. Fill the evaluations in
+### 8. Fill the evaluations in
 
 Sign in as the employee and open **My Evaluations**. Answer part of the self-evaluation and
 choose **Save Draft** - the status moves to "in progress" and you can leave and come back.
-Answer everything and choose **Submit evaluation**.
+Answer everything and choose **Submit evaluation**. The task completed in step 5 shows up on
+the form as evidence, next to the questions.
 
 Sign in as the manager. There are two cards: their own self-evaluation, and "Evaluate
 {employee}". Complete and submit both.
@@ -223,7 +270,7 @@ Note what the employee sees while this is happening: the manager's review of the
 "Manager review / Awaiting manager" and cannot be opened. It only becomes readable once the
 manager submits it.
 
-### 8. Read the AI summary
+### 9. Read the AI summary
 
 With both evaluations submitted, open the evaluation as any of the participants and choose
 **Generate AI Summary**. Gemini returns a synthesis, strengths, growth areas, and a note on
@@ -233,9 +280,10 @@ opening the page again does not regenerate it.
 This step needs `GEMINI_API_KEY` set in `.env`. Everything else in the walkthrough works
 without it.
 
-### 9. Track progress and close the cycle
+### 10. Track progress and close the cycle
 
-Back as the company admin, the cycle page shows a per-person progress table. When the review
+Back as the company admin, the cycle page shows a per-person progress table, and the same
+numbers appear as a card on the **Dashboard** while the cycle is active. When the review
 period is over, choose **Close cycle**. Closed cycles are read-only: draft saves and
 submissions are rejected, and the existing answers stay readable.
 
@@ -255,6 +303,9 @@ submissions are rejected, and the existing answers stay readable.
 | View cycle progress | - | Yes | Yes | - | - |
 | Complete assigned evaluations | - | Yes | Yes | Yes | Yes |
 | View a submitted evaluation in their company | - | Yes | Yes | - | - |
+| Assign a task to anyone active in the company | - | Yes | Yes | - | - |
+| Assign a task to a direct report | - | - | - | Yes | - |
+| Assign or claim a task for themselves | - | Yes | Yes | Yes | Yes |
 
 \* HR may not deactivate or reactivate a company admin.
 
@@ -412,6 +463,7 @@ is running.
 | --- | --- | --- |
 | GET | `/users` | Paginated |
 | GET | `/users/options` | Unpaginated `id` and `full_name`, for the manager picker |
+| GET | `/users/reports` | Manager only. Unpaginated, the caller's own direct reports — feeds the task assignment picker |
 | POST | `/users/{user_id}/manager` | Assign or clear a manager |
 | POST | `/users/{user_id}/deactivate` | Hands over reports and unfinished reviews |
 | POST | `/users/{user_id}/reactivate` | |
@@ -432,10 +484,22 @@ is running.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/evaluations/me` | Paginated |
+| GET | `/evaluations/me` | Paginated. `pending=true` returns only evaluations the caller still owes as evaluator - what the dashboard's pending-work card queries |
 | GET | `/evaluations/{evaluation_id}` | Subject to the visibility rules above |
 | PATCH | `/evaluations/{evaluation_id}` | Draft save. Partial answers allowed |
 | POST | `/evaluations/{evaluation_id}/submit` | Requires every question answered |
+
+**Tasks** (any signed-in user; assignment rules per the permissions table above)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/tasks` | Omit `assignee_id` to drop it in the pool |
+| GET | `/tasks` | Paginated. `scope` is `all`, `pool`, or `mine`; `open_only=true` restricts to `todo`/`in_progress` |
+| GET | `/tasks/{task_id}` | |
+| PATCH | `/tasks/{task_id}` | Title, description, due date, or status |
+| POST | `/tasks/{task_id}/claim` | Atomic - fails with 409 if someone else claimed it first |
+| POST | `/tasks/{task_id}/release` | Drops an assigned task back into the pool |
+| POST | `/tasks/{task_id}/assign` | Hand a task directly to someone, bypassing the pool |
 
 **Summaries**
 
@@ -474,8 +538,8 @@ docker compose exec frontend npm run test
 
 The backend suite runs against a real PostgreSQL and Redis rather than mocks, with each test
 isolated in its own transaction. Gemini calls are mocked. Coverage is heaviest where the risk
-is: the permission matrix, tenant isolation, cycle state transitions, and the evaluation
-visibility rules.
+is: the permission matrix, tenant isolation, cycle state transitions, task claim races, and the
+evaluation visibility rules. Currently 198 backend tests and 29 frontend tests.
 
 Both suites also run outside Docker, with a virtualenv from `requirements-dev.txt` and
 `npm install` respectively. The frontend's `node_modules` is otherwise maintained only inside
@@ -501,19 +565,30 @@ its container, since Compose bind-mounts just `frontend/src`.
 backend/
   app/
     api/v1/endpoints/   HTTP routing, dependencies, status codes
+      tasks.py          Task pool, claim, assign, status endpoints
     services/           Business rules and state transitions
+      task_service.py   Assignment scoping, claim/release, pool logic
     crud/               Database queries, no business logic
+      task.py            Task queries, including the atomic claim UPDATE
     schemas/            Pydantic request and response models
+      task.py            TaskCreate/Update/Assign, TaskEvidence
     models/             SQLAlchemy tables
+      task.py            Task, TaskStatus
     ai/                 Gemini prompt and client
     core/               Config, database, Redis, security, logging
     scripts/            Seed scripts for development and production
+  scripts/
+    seed_demo.py        Seeds the docs/USAGE_SCENARIO.md demo company over HTTP
   tests/
   alembic/
 frontend/
   src/
     pages/              One component per route, colocated tests
+      DashboardPage.tsx  Pending-work list and active-cycle progress card
+      TasksPage.tsx      Pool/mine task list, claim and assign actions
+      TaskDetailPage.tsx Single task, status changes
     components/         Shared UI, including the shadcn/ui primitives
+      StatusTick.tsx     Shared status indicator for tasks and evaluations
     lib/                API client, auth context, pagination helpers
 ```
 
