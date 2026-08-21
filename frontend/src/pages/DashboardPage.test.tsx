@@ -60,7 +60,7 @@ describe('DashboardPage', () => {
           type: 'self',
         },
       ]),
-      '/api/v1/tasks': page([{ id: 'task-1', title: 'Fix the API route mismatch', due_date: '2026-02-01' }]),
+      '/api/v1/tasks': page([{ id: 'task-1', title: 'Fix the API route mismatch', status: 'in_progress', due_date: '2026-02-01' }]),
     });
 
     renderPage();
