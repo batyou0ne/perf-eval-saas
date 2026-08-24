@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import Row, and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -121,6 +121,55 @@ async def upsert_responses(db: AsyncSession, evaluation_id: uuid.UUID, responses
                     text_value=response_input.text_value,
                 )
             )
+
+
+def _submitted_of(evaluation_type: EvaluationType):
+    """COUNT over a CASE that only yields a value for submitted rows of one type.
+
+    COUNT ignores NULLs, so the implicit `else NULL` is what makes this a filtered
+    count rather than a count of everything.
+    """
+    return func.count(
+        case(
+            (
+                and_(
+                    Evaluation.type == evaluation_type,
+                    Evaluation.status == EvaluationStatus.SUBMITTED,
+                ),
+                1,
+            )
+        )
+    )
+
+
+def _total_of(evaluation_type: EvaluationType):
+    return func.count(case((Evaluation.type == evaluation_type, 1)))
+
+
+async def count_submissions_per_cycle(db: AsyncSession, company_id: uuid.UUID) -> list[Row]:
+    """Per-cycle submitted/total counts for both evaluation types, oldest cycle first.
+
+    One grouped query instead of walking every cycle and re-counting its evaluations,
+    which is what the per-cycle progress endpoint does for a single cycle. The join is
+    inner on purpose: a draft cycle that has never been activated has no evaluations,
+    so it drops out here rather than showing up as an empty column on the chart.
+    """
+    result = await db.execute(
+        select(
+            EvaluationCycle.name,
+            _submitted_of(EvaluationType.SELF).label("self_submitted"),
+            _total_of(EvaluationType.SELF).label("self_total"),
+            _submitted_of(EvaluationType.MANAGER).label("manager_submitted"),
+            _total_of(EvaluationType.MANAGER).label("manager_total"),
+        )
+        .join(Evaluation, Evaluation.cycle_id == EvaluationCycle.id)
+        .where(EvaluationCycle.company_id == company_id)
+        .group_by(EvaluationCycle.id, EvaluationCycle.name, EvaluationCycle.start_date)
+        # Name breaks ties so two cycles starting the same day keep a stable order
+        # between requests, rather than the chart's bars swapping around.
+        .order_by(EvaluationCycle.start_date, EvaluationCycle.name)
+    )
+    return list(result.all())
 
 
 async def get_evaluations_for_cycle(db: AsyncSession, cycle_id: uuid.UUID) -> list[Evaluation]:

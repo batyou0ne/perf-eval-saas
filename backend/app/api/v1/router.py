@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    analytics,
     auth,
     companies,
     evaluation_cycles,
@@ -22,3 +23,4 @@ api_router.include_router(evaluation_cycles.router, tags=["evaluation-cycles"])
 api_router.include_router(evaluations.router, tags=["evaluations"])
 api_router.include_router(evaluation_summaries.router, tags=["evaluation-summaries"])
 api_router.include_router(tasks.router, tags=["tasks"])
+api_router.include_router(analytics.router, tags=["analytics"])
