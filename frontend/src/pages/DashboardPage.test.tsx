@@ -103,6 +103,72 @@ describe('DashboardPage', () => {
     expect(screen.getByText('1/4')).toBeInTheDocument();
   });
 
+  it('shows the analytics charts for a company admin, with a count per task status', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'admin-1', full_name: 'Selin Admin', role: 'company_admin' },
+    } as ReturnType<typeof useAuth>);
+    respondByPath({
+      '/api/v1/evaluations/me': page([]),
+      '/api/v1/tasks': page([]),
+      '/api/v1/cycles': page([]),
+      '/api/v1/companies/options': [],
+      '/api/v1/analytics/overview': {
+        task_status_counts: { todo: 12, in_progress: 5, done: 34, cancelled: 2 },
+        cycle_completion_rates: [
+          { cycle_name: 'Q1 2026', self_pct: 85, manager_pct: 72 },
+          { cycle_name: 'Q2 2026', self_pct: 100, manager_pct: null },
+        ],
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Task breakdown')).toBeInTheDocument();
+    expect(screen.getByText('Evaluation completion by cycle')).toBeInTheDocument();
+    // The legend carries the numbers in real DOM — the chart itself is an SVG that
+    // jsdom never gives a width to, so there is nothing to assert inside it.
+    const legendRow = screen.getByText('In progress').closest('li');
+    expect(legendRow).toHaveTextContent('5');
+    expect(screen.getByText('Done').closest('li')).toHaveTextContent('34');
+  });
+
+  it('tells a company admin when there is nothing to chart yet', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'hr-1', full_name: 'HR Person', role: 'hr' },
+    } as ReturnType<typeof useAuth>);
+    respondByPath({
+      '/api/v1/evaluations/me': page([]),
+      '/api/v1/tasks': page([]),
+      '/api/v1/cycles': page([]),
+      '/api/v1/analytics/overview': {
+        task_status_counts: { todo: 0, in_progress: 0, done: 0, cancelled: 0 },
+        cycle_completion_rates: [],
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/no tasks have been created yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no cycle has generated evaluations yet/i)).toBeInTheDocument();
+  });
+
+  it('hides the analytics charts from an employee', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'emp-1', full_name: 'Eddie Employee', role: 'employee' },
+    } as ReturnType<typeof useAuth>);
+    respondByPath({ '/api/v1/evaluations/me': page([]), '/api/v1/tasks': page([]) });
+
+    renderPage();
+
+    // Wait for the page to settle so this isn't just asserting on an unrendered frame.
+    expect(await screen.findByText(/all caught up/i)).toBeInTheDocument();
+    expect(screen.queryByText('Task breakdown')).not.toBeInTheDocument();
+    expect(screen.queryByText('Evaluation completion by cycle')).not.toBeInTheDocument();
+    // respondByPath rejects unhandled paths, so an analytics fetch here would have
+    // surfaced as a rejection rather than silently passing.
+    expect(mockApiFetchJson).not.toHaveBeenCalledWith('/api/v1/analytics/overview');
+  });
+
   it('prompts to start a cycle when none is active', async () => {
     mockUseAuth.mockReturnValue({
       user: { id: 'hr-1', full_name: 'HR Person', role: 'hr' },
