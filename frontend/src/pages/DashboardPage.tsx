@@ -7,8 +7,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { StatusTick, type TickStatus } from '@/components/StatusTick';
+import { StatusTick, TICK_LABEL, type TickStatus } from '@/components/StatusTick';
 import { cn } from '@/lib/utils';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 interface Company {
   id: string;
@@ -54,6 +67,10 @@ export function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Standing shape of the company, for the people who steer it. It sits below the
+          personal cards because it answers "how are we doing", not "what do I do next". */}
+      {canManageCycles && <AnalyticsSection />}
 
       {/* Admin forms stay in a reading-width column — a form stretched to the grid's
           full width is harder to fill in, not easier. */}
@@ -263,6 +280,171 @@ function ProgressRow({ label, done, total }: { label: string; done: number; tota
           style={{ width: `${pct}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+const TASK_SLICES = ['todo', 'in_progress', 'done', 'cancelled'] as const;
+type TaskSlice = (typeof TASK_SLICES)[number];
+
+interface AnalyticsOverview {
+  task_status_counts: Record<TaskSlice, number>;
+  // null, not 0: the cycle owed no evaluations of that type, so there is no rate to plot.
+  cycle_completion_rates: { cycle_name: string; self_pct: number | null; manager_pct: number | null }[];
+}
+
+/** Which design token each chart colour comes from, and the light-theme value to fall
+ * back on when there is no computed style to read (jsdom under test). */
+const CHART_TOKENS = {
+  todo: ['--muted-foreground', 'oklch(0.551 0.027 264.4)'],
+  in_progress: ['--status-warn', 'oklch(0.621 0.111 75.3)'],
+  done: ['--status-good', 'oklch(0.531 0.079 159.9)'],
+  cancelled: ['--status-bad', 'oklch(0.537 0.135 31.1)'],
+  self: ['--primary', 'oklch(0.388 0.081 256.5)'],
+  manager: ['--status-good', 'oklch(0.531 0.079 159.9)'],
+  axis: ['--muted-foreground', 'oklch(0.551 0.027 264.4)'],
+} as const satisfies Record<string, readonly [string, string]>;
+
+type ChartColors = Record<keyof typeof CHART_TOKENS, string>;
+
+const FALLBACK_COLORS = Object.fromEntries(
+  Object.entries(CHART_TOKENS).map(([key, [, fallback]]) => [key, fallback]),
+) as ChartColors;
+
+/** Recharts puts these straight onto SVG `fill`/`stroke` attributes, where `var(--token)`
+ * doesn't resolve — so the charts need real colour strings rather than token references.
+ * Resolving them at runtime keeps the charts on the app's palette instead of a second,
+ * hand-copied one, and means a theme swap moves them too. */
+function useChartColors(): ChartColors {
+  const [colors, setColors] = useState<ChartColors>(FALLBACK_COLORS);
+
+  useEffect(() => {
+    const read = () => {
+      const root = getComputedStyle(document.documentElement);
+      setColors(
+        Object.fromEntries(
+          Object.entries(CHART_TOKENS).map(([key, [cssVar, fallback]]) => [
+            key,
+            root.getPropertyValue(cssVar).trim() || fallback,
+          ]),
+        ) as ChartColors,
+      );
+    };
+
+    read();
+
+    // The palette is swapped by toggling `.dark` on <html>, which changes what the
+    // tokens resolve to without re-rendering anything. Without this the charts would
+    // keep whichever theme's colours they happened to mount under.
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  return colors;
+}
+
+function AnalyticsSection() {
+  const [data, setData] = useState<AnalyticsOverview | null>(null);
+  const colors = useChartColors();
+
+  useEffect(() => {
+    apiFetchJson<AnalyticsOverview>('/api/v1/analytics/overview')
+      .then(setData)
+      .catch(() => {});
+  }, []);
+
+  const sliceCounts = data?.task_status_counts;
+  const totalTasks = sliceCounts ? TASK_SLICES.reduce((sum, slice) => sum + sliceCounts[slice], 0) : 0;
+  const pieData = sliceCounts ? TASK_SLICES.map((slice) => ({ slice, value: sliceCounts[slice] })) : [];
+
+  return (
+    <div className="grid items-start gap-5 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Task breakdown</CardTitle>
+          <CardDescription>Every task in the company, by status.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!data ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : totalTasks === 0 ? (
+            <p className="text-sm text-muted-foreground">No tasks have been created yet.</p>
+          ) : (
+            <div className="flex flex-col items-center gap-4 sm:flex-row">
+              <ResponsiveContainer width="100%" height={180} minWidth={0} className="sm:max-w-[180px]">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="slice" innerRadius={45} outerRadius={72} paddingAngle={2}>
+                    {pieData.map((entry) => (
+                      <Cell key={entry.slice} fill={colors[entry.slice]} stroke="none" />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [value as number, TICK_LABEL[name as TaskSlice]]} />
+                </PieChart>
+              </ResponsiveContainer>
+
+              {/* The counts live in real DOM rather than only in the SVG, so the numbers
+                  stay readable to a screen reader and selectable like any other text. */}
+              <ul className="flex w-full flex-col gap-2">
+                {TASK_SLICES.map((slice) => (
+                  <li key={slice} className="flex items-center gap-2 text-xs">
+                    <span
+                      aria-hidden
+                      className="size-2.5 shrink-0 rounded-[3px]"
+                      style={{ backgroundColor: colors[slice] }}
+                    />
+                    <span className="flex-1 text-foreground">{TICK_LABEL[slice]}</span>
+                    <span className="font-mono text-muted-foreground">{sliceCounts![slice]}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Evaluation completion by cycle</CardTitle>
+          <CardDescription>Share of evaluations submitted, oldest cycle first.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!data ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : data.cycle_completion_rates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No cycle has generated evaluations yet — activate one to start tracking completion.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220} minWidth={0}>
+              <BarChart data={data.cycle_completion_rates} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                <CartesianGrid vertical={false} stroke={colors.axis} strokeOpacity={0.2} />
+                <XAxis
+                  dataKey="cycle_name"
+                  tick={{ fill: colors.axis, fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: colors.axis, strokeOpacity: 0.3 }}
+                  // Cycle names are free text ("Q1 2026 Performance Review"), so they get
+                  // clipped to keep the axis one line rather than rotated into a wedge.
+                  tickFormatter={(name: string) => (name.length > 12 ? `${name.slice(0, 12)}…` : name)}
+                />
+                <YAxis
+                  domain={[0, 100]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  tick={{ fill: colors.axis, fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(value: number) => `${value}%`}
+                />
+                <Tooltip formatter={(value) => `${value}%`} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="self_pct" name="Self" fill={colors.self} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                <Bar dataKey="manager_pct" name="Manager" fill={colors.manager} radius={[3, 3, 0, 0]} maxBarSize={28} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

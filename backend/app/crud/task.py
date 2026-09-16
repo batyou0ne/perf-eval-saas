@@ -70,6 +70,23 @@ async def list_open_tasks_for_assignee(db: AsyncSession, assignee_id: uuid.UUID)
     return list(result.scalars().all())
 
 
+async def count_tasks_by_status(db: AsyncSession, company_id: uuid.UUID) -> dict[TaskStatus, int]:
+    """How the company's tasks are split across the four statuses.
+
+    Aggregated in the database rather than by paging the task list and counting in
+    Python: the dashboard only needs four numbers, and a company with thousands of
+    tasks shouldn't have to ship them all to produce them. Statuses with no rows are
+    absent from the result — the caller fills the gaps, since a missing key and a
+    zero mean the same thing here.
+    """
+    result = await db.execute(
+        select(Task.status, func.count())
+        .where(Task.company_id == company_id)
+        .group_by(Task.status)
+    )
+    return {status: count for status, count in result.all()}
+
+
 async def list_completed_tasks_for_subject_in_range(
     db: AsyncSession, company_id: uuid.UUID, subject_id: uuid.UUID, start_date: date, end_date: date
 ) -> list[Task]:
